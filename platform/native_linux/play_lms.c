@@ -133,7 +133,8 @@ static void stop(void *ctx) {
         hal_atomic_set(&failed, 1);
         return; /* Retain resources until quiescence can be established. */
     }
-    if (pipeline.state == EAF_RUNNING && eaf_pipeline_stop(&pipeline)) {
+    if ((pipeline.state == EAF_RUNNING || pipeline.state == EAF_RECOVERY) &&
+        eaf_pipeline_stop(&pipeline)) {
         hal_atomic_set(&failed, 1);
         return;
     }
@@ -156,8 +157,12 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     if (!rc)
         rc = eaf_pipeline_configure(&pipeline, 128);
     if (rc) {
-        (void)eaf_pipeline_deinit(&pipeline);
-        return rc;
+        int cleanup = eaf_pipeline_deinit(&pipeline);
+        if (cleanup) {
+            active = true;
+            hal_atomic_set(&failed, 1);
+        }
+        return cleanup ? cleanup : rc;
     }
     hal_atomic_set(&quit, 0);
     hal_atomic_set(&run_gate, 0);
@@ -169,8 +174,12 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     hal_atomic_set(&done, 0);
     rc = hal_thread_create(&audio, consume, NULL);
     if (rc) {
-        (void)eaf_pipeline_deinit(&pipeline);
-        return rc;
+        int cleanup = eaf_pipeline_deinit(&pipeline);
+        if (cleanup) {
+            active = true;
+            hal_atomic_set(&failed, 1);
+        }
+        return cleanup ? cleanup : rc;
     }
     active = true;
     rc = eaf_pipeline_start(&pipeline);

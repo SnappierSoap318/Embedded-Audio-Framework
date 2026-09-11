@@ -8,7 +8,7 @@ static void *pending;
 static bool started;
 unsigned eaf_mock_commits;
 int32_t eaf_mock_last;
-bool eaf_mock_fail_write;
+bool eaf_mock_fail_write, eaf_mock_fail_start, eaf_mock_fail_drop, eaf_mock_fail_drain;
 static int configure(const struct device *dev, enum i2s_dir dir, const struct i2s_config *cfg) {
     (void)dev;
     if (dir != I2S_DIR_TX || cfg->word_size != 32 || cfg->channels != 2)
@@ -32,12 +32,18 @@ static int trigger(const struct device *dev, enum i2s_dir dir, enum i2s_trigger_
     (void)dev;
     (void)dir;
     if (cmd == I2S_TRIGGER_START) {
-        if (!pending)
+        if (eaf_mock_fail_start || !pending)
             return -EIO;
         started = true;
-    } else if (cmd == I2S_TRIGGER_DROP)
+    } else if (cmd == I2S_TRIGGER_DRAIN) {
+        if (eaf_mock_fail_drain)
+            return -EIO;
         started = false;
-    else
+    } else if (cmd == I2S_TRIGGER_DROP) {
+        if (eaf_mock_fail_drop)
+            return -EIO;
+        started = false;
+    } else
         return -EINVAL;
     if (pending) {
         k_mem_slab_free(config.mem_slab, pending);

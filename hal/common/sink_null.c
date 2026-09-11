@@ -60,12 +60,13 @@ static int adjust(eaf_sink_t *sink, int32_t ppm) {
     (void)ppm;
     return EAF_UNSUPPORTED;
 }
-static void deinit(eaf_sink_t *sink) {
+static int deinit(eaf_sink_t *sink) {
     eaf_null_sink_ctx_t *s = sink->driver_data;
     if (s) {
         s->running = false;
         s->initialized = false;
         s->acquired = false;
     }
+    return EAF_OK;
 }
 const struct eaf_sink_ops eaf_null_sink_ops = {init, start, stop, acquire, commit, adjust, deinit};

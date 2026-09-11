@@ -1,13 +1,21 @@
 #include <eaf/eaf_core.h>
 #include <string.h>
-static void release(eaf_pipeline_t *p) {
-    if (p->sink_initialized)
-        p->config.sink->ops->deinit(p->config.sink);
+static int release(eaf_pipeline_t *p) {
+    if (p->sink_initialized) {
+        p->sink_ready = false;
+        int rc = p->config.sink->ops->deinit(p->config.sink);
+        if (rc) {
+            p->state = EAF_RECOVERY;
+            return rc;
+        }
+    }
     p->sink_initialized = false;
+    p->sink_ready = false;
     while (p->initialized_nodes) {
         eaf_node_t *n = p->config.nodes[--p->initialized_nodes];
         n->ops->deinit(n);
     }
+    return EAF_OK;
 }
 int eaf_pipeline_init(eaf_pipeline_t *p, const eaf_pipeline_config_t *config) {
     if (!p || !config || !config->reservoir || !config->reservoir->storage || !config->sink ||
@@ -36,7 +44,9 @@ int eaf_pipeline_configure(eaf_pipeline_t *p, uint32_t block_frames) {
         return EAF_STATE;
     if (!block_frames || block_frames > p->config.reservoir->capacity)
         return EAF_INVALID;
-    release(p);
+    int cleanup = release(p);
+    if (cleanup)
+        return cleanup;
     p->state = EAF_INITIALIZED;
     eaf_format_t fmt = p->config.reservoir->format;
     for (size_t i = 0; i < p->config.node_count; ++i) {
@@ -56,13 +66,13 @@ int eaf_pipeline_configure(eaf_pipeline_t *p, uint32_t block_frames) {
         }
         fmt = next;
     }
+    p->sink_initialized = true; /* Partial init must also be cleaned up. */
     int rc = p->config.sink->ops->init(p->config.sink, &fmt, block_frames);
     if (rc) {
-        p->config.sink->ops->deinit(p->config.sink);
-        release(p);
-        return rc;
+        cleanup = release(p);
+        return cleanup ? cleanup : rc;
     }
-    p->sink_initialized = true;
+    p->sink_ready = true;
     p->output_format = fmt;
     p->block_frames = block_frames;
     p->state = EAF_CONFIGURED;
@@ -78,6 +88,12 @@ int eaf_pipeline_start(eaf_pipeline_t *p) {
     int rc = p->config.sink->ops->start(p->config.sink);
     if (!rc)
         p->state = EAF_RUNNING;
+    else {
+        p->state = EAF_RECOVERY; /* START may have partly enabled hardware. */
+        int stopped = eaf_pipeline_stop(p);
+        if (stopped)
+            return stopped;
+    }
     return rc;
 }
 int eaf_pipeline_process(eaf_pipeline_t *p) {
@@ -135,12 +151,12 @@ int eaf_pipeline_process(eaf_pipeline_t *p) {
 int eaf_pipeline_stop(eaf_pipeline_t *p) {
     if (!p)
         return EAF_INVALID;
-    if (p->state != EAF_RUNNING)
+    if (p->state != EAF_RUNNING && p->state != EAF_RECOVERY)
         return EAF_STATE;
     int rc = p->config.sink->ops->stop(p->config.sink);
     if (rc)
         return rc;
-    p->state = EAF_STOPPED;
+    p->state = p->sink_ready ? EAF_STOPPED : EAF_INITIALIZED;
     for (size_t i = 0; i < p->initialized_nodes; ++i) {
         int reset = p->config.nodes[i]->ops->reset(p->config.nodes[i]);
         if (!rc)
@@ -153,7 +169,9 @@ int eaf_pipeline_deinit(eaf_pipeline_t *p) {
         return EAF_INVALID;
     if (p->state == EAF_RUNNING)
         return EAF_STATE;
-    release(p);
+    int rc = release(p);
+    if (rc)
+        return rc;
     *p = (eaf_pipeline_t){0};
     return EAF_OK;
 }

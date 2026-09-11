@@ -79,3 +79,19 @@ two MAX98357 modules; later WROVER-IE/N16R8 and TAS5805M (exact variants pending
   growing pool. Physical DMA reachability and cache behavior need board testing.
 - Protocol parsing and Bluetooth ingress are separately testable groundwork;
   they do not advertise end-to-end network or radio playback.
+
+## T03 sink lifecycle
+
+Sink deinit returns an error. A failed release retains graph/node references in
+RECOVERY; retry stop/deinit before replacing configuration. Partial init is tracked
+separately from a startable sink. Failed START attempts DROP immediately. A failed
+write or drain requires stop, never reprocessing the same partially consumed block.
+The native worker must be joined before graph cleanup; failed joins retain handles.
+EOS commit performs a bounded queue drain: ALSA one second, Zephyr I2S DRAIN plus
+reclaiming all four slab blocks under a shared one-second deadline. STOP is DROP.
+Slab reclamation proves driver ownership release, not physical amplifier timing;
+T09 retains that board acceptance gate. ALSA write retry remains bounded at 250 ms.
+ALSA close consumes its handle even when reporting an error, so cleanup clears that
+handle while reporting the error; a subsequent deinit can complete graph release.
+Host fault tests and the Zephyr mock exercise retry paths without claiming radio,
+DMA or speaker-time validation.

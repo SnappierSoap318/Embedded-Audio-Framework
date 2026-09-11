@@ -68,6 +68,26 @@ static int acquire(eaf_sink_t *sink, eaf_buffer_t **buffer) {
     *buffer = &state.buffer;
     return EAF_OK;
 }
+/* Reclaim every DMA slot after DRAIN. This waits for driver ownership release,
+   not a measurement of the amplifier's presentation latency. */
+static int drain(void) {
+    if (i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_DRAIN))
+        return EAF_IO;
+    void *blocks[4];
+    unsigned count = 0;
+    int64_t deadline = k_uptime_get() + 1000;
+    while (count < 4) {
+        if (k_mem_slab_alloc(&tx_blocks, &blocks[count], K_TIMEOUT_ABS_MS(deadline)))
+            break;
+        ++count;
+    }
+    int rc = count == 4 ? EAF_OK : EAF_IO;
+    while (count)
+        k_mem_slab_free(&tx_blocks, blocks[--count]);
+    if (!rc)
+        state.started = false;
+    return rc;
+}
 static int commit(eaf_sink_t *sink, eaf_buffer_t *buffer) {
     (void)sink;
     if (!state.running || !state.held || buffer != &state.buffer || buffer->samples != state.held ||
@@ -85,7 +105,7 @@ static int commit(eaf_sink_t *sink, eaf_buffer_t *buffer) {
             return EAF_IO;
         state.started = true;
     }
-    return EAF_OK;
+    return (buffer->flags & EAF_FRAME_EOS) ? drain() : EAF_OK;
 }
 static int stop(eaf_sink_t *sink) {
     (void)sink;
@@ -99,10 +119,12 @@ static int stop(eaf_sink_t *sink) {
     state.started = false;
     return EAF_OK;
 }
-static void deinit(eaf_sink_t *sink) {
-    if (stop(sink))
-        return; /* Retain ownership/state if the driver cannot stop. */
+static int deinit(eaf_sink_t *sink) {
+    int rc = stop(sink);
+    if (rc)
+        return rc; /* Retain ownership/state if the driver cannot stop. */
     state.configured = false;
+    return EAF_OK;
 }
 static int adjust(eaf_sink_t *sink, int32_t ppm) {
     (void)sink;

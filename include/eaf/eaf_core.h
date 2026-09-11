@@ -23,7 +23,8 @@ typedef enum {
     EAF_INITIALIZED,
     EAF_CONFIGURED,
     EAF_RUNNING,
-    EAF_STOPPED
+    EAF_STOPPED,
+    EAF_RECOVERY /* Cleanup failed: only stop/deinit retry is permitted. */
 } eaf_pipeline_state_t;
 typedef struct {
     eaf_reservoir_t *reservoir;
@@ -38,6 +39,7 @@ typedef struct {
     uint32_t block_frames;
     size_t initialized_nodes;
     bool sink_initialized;
+    bool sink_ready;
     bool completed;
 } eaf_pipeline_t;
 /* Pipeline must be zero initialized. Caller serializes lifecycle and process. */

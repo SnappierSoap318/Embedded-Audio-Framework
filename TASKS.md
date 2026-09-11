@@ -30,11 +30,13 @@ There is no fixed finish date until these scopes and hardware gates are validate
   allocation interception during startup-to-first-block and repeated track changes.
   Completed: real native callbacks tested with thread-create/START failure injection,
   eight rate-changing restarts, direct heap-call guards and a clean TSan run.
-- [ ] **T03 — Unify sink error/drain lifecycle.** Propagate stop/deinit failures,
+- [x] **T03 — Unify sink error/drain lifecycle.** Propagate stop/deinit failures,
   retain resources safely, define bounded output drain vs drop, and avoid freeing
   thread handles until output is quiescent. Inject write/START/DROP/drain failures.
-  Native LMS now retains state and reports join/stop failures; generic sink deinit
-  error propagation and hardware partial-START/drain recovery remain open.
+  Completed: checked sink deinit, partial-START rollback, recovery state, bounded
+  ALSA/I2S queue drain and retry-safe DROP. Host faults cover partial init, START,
+  write, DROP, cleanup and drain timeout; Zephyr mocks cover write/START/DROP/drain
+  errors. Physical DMA completion and amplifier tail validation remain T09.
 - [ ] **T04 — Complete HAL scheduling contract.** Monotonic waits, distinct decoder
   and audio priorities, optional affinity, bounded wakeups. Verify timeout behavior,
   semaphore races and contention; measure scheduling margin on ESP32.

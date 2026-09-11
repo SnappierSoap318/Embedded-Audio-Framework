@@ -28,11 +28,16 @@ typedef struct eaf_sink eaf_sink_t;
 struct eaf_sink_ops {
     int (*init)(eaf_sink_t *, const eaf_format_t *, size_t);
     int (*start)(eaf_sink_t *);
+    /* Immediate DROP, including any acquired buffer. Failure retains ownership. */
     int (*stop)(eaf_sink_t *);
     int (*acquire_buf)(eaf_sink_t *, eaf_buffer_t **);
+    /* EOS must finish a bounded driver-queue drain before success. On error the
+       owner must stop; it must not retry processing a partially written block. */
     int (*commit_buf)(eaf_sink_t *, eaf_buffer_t *);
     int (*adjust_ppm)(eaf_sink_t *, int32_t);
-    void (*deinit)(eaf_sink_t *);
+    /* Deinit also handles partial init/start. On failure preserve a retry-safe
+       context; callers must not assume all resources were released. */
+    int (*deinit)(eaf_sink_t *);
 };
 struct eaf_sink {
     const struct eaf_sink_ops *ops;

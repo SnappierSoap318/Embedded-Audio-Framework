@@ -14,7 +14,7 @@ static eaf_lms_parser_t lms;
 static int packets;
 extern unsigned eaf_mock_commits;
 extern int32_t eaf_mock_last;
-extern bool eaf_mock_fail_write;
+extern bool eaf_mock_fail_write, eaf_mock_fail_start, eaf_mock_fail_drop, eaf_mock_fail_drain;
 extern int eaf_sbc_smoke(void);
 extern int eaf_bt_smoke(void);
 static int packet(void *ctx, const uint8_t *data, size_t length) {
@@ -92,16 +92,39 @@ int main(void) {
             for (size_t i = 0; i < 64; ++i)
                 b->samples[i] = (int32_t)i;
             eaf_mock_fail_write = (cycle & 1u) != 0;
+            eaf_mock_fail_start = !eaf_mock_fail_write;
             int result = tx->ops->commit_buf(tx, b);
-            if (result != (eaf_mock_fail_write ? EAF_IO : EAF_OK))
+            if (result != EAF_IO)
                 rc = EAF_IO;
         }
+        eaf_mock_fail_drop = true;
+        if (!rc && (tx->ops->stop(tx) != EAF_IO || tx->ops->deinit(tx) != EAF_IO ||
+                    tx->ops->start(tx) != EAF_STATE))
+            rc = EAF_IO;
+        eaf_mock_fail_drop = false;
         if (!rc)
             rc = tx->ops->stop(tx);
     }
     if (!rc && (eaf_mock_commits != 5 || eaf_mock_last != 63))
         rc = EAF_IO;
-    tx->ops->deinit(tx);
+    eaf_mock_fail_start = eaf_mock_fail_write = false;
+    for (unsigned cycle = 0; !rc && cycle < 2; ++cycle) {
+        rc = tx->ops->start(tx);
+        eaf_buffer_t *b = NULL;
+        if (!rc)
+            rc = tx->ops->acquire_buf(tx, &b);
+        if (!rc) {
+            b->flags = EAF_FRAME_EOS;
+            eaf_mock_fail_drain = cycle == 0;
+            if (tx->ops->commit_buf(tx, b) != (eaf_mock_fail_drain ? EAF_IO : EAF_OK))
+                rc = EAF_IO;
+        }
+        if (!rc)
+            rc = tx->ops->stop(tx);
+    }
+    int cleanup = tx->ops->deinit(tx);
+    if (!rc)
+        rc = cleanup;
     if (!rc)
         rc = eaf_sbc_smoke();
     if (rc == EAF_OK)

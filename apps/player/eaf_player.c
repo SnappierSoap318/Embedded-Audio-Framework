@@ -106,7 +106,7 @@ int eaf_player_stop(eaf_player_t *p) {
     if (!p || !p->initialized)
         return EAF_INVALID;
     int rc = EAF_OK;
-    if (p->pipeline->state == EAF_RUNNING)
+    if (p->pipeline->state == EAF_RUNNING || p->pipeline->state == EAF_RECOVERY)
         rc = eaf_pipeline_stop(p->pipeline);
     /* Always request producer shutdown, including sink errors. Retain the thread
        handle on sink-stop failure so callers can retry without freeing live RT resources. */

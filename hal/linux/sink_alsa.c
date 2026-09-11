@@ -12,9 +12,9 @@ static int init(eaf_sink_t *sink, const eaf_format_t *fmt, size_t frames) {
     if (snd_pcm_open(&pcm, s->device ? s->device : "default", SND_PCM_STREAM_PLAYBACK,
                      SND_PCM_NONBLOCK) < 0)
         return EAF_IO;
+    s->pcm = pcm; /* Retain even partial configuration for checked deinit. */
     if (snd_pcm_set_params(pcm, SND_PCM_FORMAT_S32, SND_PCM_ACCESS_RW_INTERLEAVED,
                            fmt->num_channels, fmt->sample_rate, 1, 50000) < 0) {
-        snd_pcm_close(pcm);
         return EAF_UNSUPPORTED;
     }
     s->pcm = pcm;
@@ -39,13 +39,19 @@ static int start(eaf_sink_t *sink) {
 }
 static int stop(eaf_sink_t *sink) {
     eaf_alsa_sink_ctx_t *s = sink->driver_data;
-    if (!s || !s->pcm)
-        return EAF_STATE;
-    int rc = snd_pcm_drop(s->pcm);
+    if (!s)
+        return EAF_INVALID;
+    if (!s->pcm)
+        return EAF_OK;
+    snd_pcm_state_t state = snd_pcm_state(s->pcm);
+    int rc =
+        (state == SND_PCM_STATE_OPEN || state == SND_PCM_STATE_SETUP) ? 0 : snd_pcm_drop(s->pcm);
+    if (rc < 0)
+        return EAF_IO;
     s->running = false;
     s->acquired = false;
     s->paused = false;
-    return rc < 0 ? EAF_IO : EAF_OK;
+    return EAF_OK;
 }
 static int acquire(eaf_sink_t *sink, eaf_buffer_t **buf) {
     eaf_alsa_sink_ctx_t *s = sink->driver_data;
@@ -131,14 +137,20 @@ static int adjust(eaf_sink_t *sink, int32_t ppm) {
     (void)ppm;
     return EAF_UNSUPPORTED;
 }
-static void deinit(eaf_sink_t *sink) {
+static int deinit(eaf_sink_t *sink) {
     eaf_alsa_sink_ctx_t *s = sink->driver_data;
     if (!s)
-        return;
-    if (s->pcm)
-        snd_pcm_close(s->pcm);
+        return EAF_INVALID;
+    if (!s->pcm)
+        return EAF_OK;
+    int rc = stop(sink);
+    if (rc)
+        return rc;
+    /* ALSA close consumes the handle even if a plugin returns an error. */
+    rc = snd_pcm_close(s->pcm);
     s->pcm = NULL;
     s->running = false;
     s->acquired = false;
+    return rc < 0 ? EAF_IO : EAF_OK;
 }
 const struct eaf_sink_ops eaf_alsa_sink_ops = {init, start, stop, acquire, commit, adjust, deinit};
