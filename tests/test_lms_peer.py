@@ -40,10 +40,16 @@ def case(width, big, failure=None, autostart=1):
                 peer.settimeout(10)
                 opcode, hello = packet(peer)
                 assert opcode == b"HELO" and b"pcm" in hello
-                for adjust, left, right in [(1, 65536, 65536), (1, 32768, 0),
-                                            (1, 131072, 1), (0, 0, 0)]:
-                    gain = bytearray(26); gain[:4] = b"audg"; gain[12] = adjust
-                    struct.pack_into(">II", gain, 18, left, right)
+                gains = [(1, 65536, 65536), (1, 32768, 0),
+                         (1, 131072, 1), (0, 0, 0), (1, 16384, 32768)]
+                for index, (adjust, left, right) in enumerate(gains):
+                    # Packed wire fields: opcode, legacy gains, adjust, preamp,
+                    # new gains. No C-struct padding; gainL starts at byte 14.
+                    gain = struct.pack(">4sIIBBII", b"audg", 0x11223344, 0x55667788,
+                                       adjust, 0x7f, left, right)
+                    if index != 4:
+                        # A zero sequence reproduces the formerly silent right channel.
+                        gain += struct.pack(">I", 0 if index == 0 else 0xdeadbeef)
                     send_packet(peer, gain)
                 request = b"GET /stream.pcm HTTP/1.0\r\nHost: localhost\r\n\r\n"
                 start = bytearray(28)
@@ -174,4 +180,4 @@ scheduled = bytearray(28); scheduled[:5] = b"strmu"
 struct.pack_into(">I", scheduled, 18, 100)
 rejected_gate(scheduled)
 
-rejected_gate(b"audg" + bytes(21))
+rejected_gate(b"audg" + bytes(17))

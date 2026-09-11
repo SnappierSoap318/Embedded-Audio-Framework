@@ -1,5 +1,17 @@
 # Native validation
 
+## LMS stereo volume wire-layout correction
+
+Corrected audg gains to byte offsets 14 and 18 (previously 18 and 22). The old
+parser used the right gain for the left channel and a trailing sequence field
+for the right channel, muting it when that field was zero. The earlier fixture
+incorrectly duplicated the parser offsets; it now packs the actual protocol
+fields and tests both 22-byte payloads and payloads with trailing sequence data.
+Distinct nonzero gains, mute, unity and ignored sequence values are covered.
+The corrected fixture failed against the old parser; all 14 ASan/UBSan tests
+pass with the fix. Physical stereo listening after this fix has not been rechecked.
+
+
 ## ALSA, LMS volume and Zephyr A2DP binding — 2026-09-11
 
 - All 14 ASan/UBSan tests passed, including real ALSA null/file plugin capture,

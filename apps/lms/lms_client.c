@@ -50,11 +50,13 @@ static void stop_stream(eaf_lms_client_t *c) {
 static int command(void *ctx, const uint8_t *p, size_t n) {
     eaf_lms_client_t *c = ctx;
     if (memcmp(p, "audg", 4) == 0) {
-        if (n != 26u)
+        if (n < 22u)
             return EAF_INVALID;
         int32_t gains[2];
         for (size_t ch = 0; ch < 2; ++ch) {
-            const uint8_t *v = p + 18u + ch * 4u;
+            /* 4-byte opcode, two legacy u32 gains, adjust + preamp bytes,
+               then the two u32 gains. Any trailing sequence fields are ignored. */
+            const uint8_t *v = p + 14u + ch * 4u;
             uint32_t raw = (uint32_t)v[0] << 24 | (uint32_t)v[1] << 16 | (uint32_t)v[2] << 8 | v[3];
             /* LMS uses unsigned 16.16. No amplification in the master stage. */
             gains[ch] = !p[12] || raw >= 65536u ? INT32_MAX : (int32_t)(raw << 15);
