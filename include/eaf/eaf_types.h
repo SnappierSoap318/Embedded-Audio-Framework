@@ -12,7 +12,8 @@ typedef enum {
     EAF_INVALID = -1,
     EAF_STATE = -2,
     EAF_IO = -3,
-    EAF_UNSUPPORTED = -4
+    EAF_UNSUPPORTED = -4,
+    EAF_TIMEOUT = -5
 } eaf_result_t;
 typedef enum {
     EAF_CH_FRONT_LEFT = 1u,

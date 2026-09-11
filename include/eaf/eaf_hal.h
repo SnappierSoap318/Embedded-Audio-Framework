@@ -14,10 +14,24 @@ typedef struct {
 typedef struct {
     void *impl;
 } eaf_sem_t;
+typedef enum { EAF_THREAD_DECODER, EAF_THREAD_AUDIO } eaf_thread_role_t;
+typedef struct {
+    eaf_thread_role_t role;
+    int cpu;       /* -1: unrestricted; otherwise an OS CPU index. */
+    bool realtime; /* Linux: request FIFO scheduling; errors never silently downgrade.
+                      Zephyr: both modes use role-specific preemptive priorities. */
+} eaf_thread_options_t;
+/* Options are copied during create. Entry cannot run before scheduling/affinity
+   setup succeeds. Linux default is ordinary scheduling; Zephyr audio outranks decoder. */
+int hal_thread_create_with_options(eaf_thread_t *thread, void (*entry)(void *), void *arg,
+                                   const eaf_thread_options_t *options);
 /* Init/create may allocate; join and deinit only after audio stops. */
 int hal_thread_create(eaf_thread_t *thread, void (*entry)(void *), void *arg);
 int hal_thread_join(eaf_thread_t *thread);
 int hal_sem_init(eaf_sem_t *sem);
+/* Binary, coalescing wake hint: recheck the caller's atomic predicate after wake.
+   Relative monotonic timeout; zero polls. EAF_TIMEOUT differs from EAF_IO.
+   No concurrent init/deinit with give/take, and no deinit while waiters exist. */
 int hal_sem_take(eaf_sem_t *sem, uint32_t timeout_ms);
 void hal_sem_give(eaf_sem_t *sem);
 void hal_sem_deinit(eaf_sem_t *sem);

@@ -74,3 +74,32 @@ then tests EOS drain failure and success. These mocks check software ownership;
 ESP32 DMA timing, actual EOF tail and driver starvation recovery remain board gates.
 Sink implementers must return checked errors from deinit and preserve a retry-safe
 context. Update custom sink operation tables for the new `int` return signature.
+
+## Scheduling HAL checks (T04)
+
+Linux requires `sem_clockwait` and GNU pthread affinity attributes; CMake fails
+clearly if the monotonic wait API is unavailable. `hal_os` tests coalescing wakes,
+monotonic expiration with an injected EINTR, 5,000 contended wake/ack handshakes,
+actual allowed-CPU pinning, and both FIFO role priorities with injected EPERM.
+The denied-request test does not require realtime privileges. The native CLI uses
+ordinary scheduling; callers opting into FIFO must handle EAF_IO on denial.
+`hal_sem_take` now returns EAF_TIMEOUT on expiry rather than the former EAF_IO.
+
+```sh
+cmake --build build-p0-tsan --target test_hal_os test_lms_startup
+ctest --test-dir build-p0-tsan -R '^(hal_os|lms_startup)$' --output-on-failure
+```
+
+Zephyr smoke verifies priorities 3 (audio) / 5 (decoder), repeated slot reuse,
+binary wakes and monotonic timeout. Replace old CONFIG_EAF_THREAD_PRIORITY settings
+with CONFIG_EAF_AUDIO_PRIORITY / CONFIG_EAF_DECODER_PRIORITY. Add `affinity.conf`
+to the smoke's EXTRA_CONF_FILE list to exercise CPU-mask-enabled creation on CPU 0;
+without it, the smoke verifies unsupported affinity requests leave no thread handle.
+This native_sim configuration verifies API behavior, not multi-core ESP32 placement.
+
+Before closing T04 on the board, record block period, worst wake-to-commit latency
+and DSP compute time separately, under Wi-Fi and Bluetooth traffic. Exclude sink
+acquisition waits from the DSP compute measurement. Check the architecture's 40%
+compute budget and DMA queue margin with GPIO/cycle-counter evidence, document
+priorities/CPU assignments, and retain observed overruns. No physical timing result
+is implied by host sanitizer or simulated-kernel tests.

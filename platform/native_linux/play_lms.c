@@ -154,7 +154,8 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     hal_atomic_set(&pause_request, 0);
     hal_atomic_set(&pause_ack, 0);
     hal_atomic_set(&done, 0);
-    rc = hal_thread_create(&audio, consume, NULL);
+    const eaf_thread_options_t scheduling = {EAF_THREAD_AUDIO, -1, false};
+    rc = hal_thread_create_with_options(&audio, consume, NULL, &scheduling);
     if (rc) {
         int cleanup = eaf_pipeline_deinit(&pipeline);
         if (cleanup) {

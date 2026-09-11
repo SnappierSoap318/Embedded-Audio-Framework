@@ -62,6 +62,26 @@ slab. Board DMA reachability, alignment/cache behavior and memory budgets still
 need qualification. ALSA/libc/codec internals are outside the direct EAF heap-call
 guard; Linux playback does not claim whole-process zero allocation or hard real time.
 
+## Scheduling and wakeups
+
+Workers declare AUDIO or DECODER through `hal_thread_create_with_options`; legacy
+create means decoder, unrestricted CPU, ordinary host scheduling. Zephyr defaults
+to preemptive priorities 3/5, checked at build time so audio outranks the decoder.
+Linux uses explicit SCHED_OTHER by default. An opt-in realtime request maps audio
+to FIFO 20 and decoder to FIFO 10; errors are reported, with no silent downgrade.
+CPU -1 is unrestricted. Linux applies pthread affinity attributes before entry;
+Zephyr pins the not-yet-started worker when CONFIG_SCHED_CPU_MASK is enabled, or
+returns EAF_UNSUPPORTED. Owners must still create/gate workers before START.
+Existing application main threads are not reprioritized by this API.
+
+Semaphores are binary coalescing wake hints, not event counters. Waits use monotonic
+time: zero polls, expiration returns EAF_TIMEOUT, and interruption retries preserve
+the original deadline. Recheck an atomic predicate after wake. Init/deinit require
+quiescence; never destroy a semaphore with waiters. Requested wait deadlines do not
+bound dispatch latency or establish a real-time guarantee. Join remains blocking,
+after cooperative cancellation; ESP32 wake/compute margin under Wi-Fi/BT contention
+is still a T04 hardware gate.
+
 ## Reservoir and control semantics
 
 The reservoir uses always-lock-free C11 32-bit atomics with release/acquire

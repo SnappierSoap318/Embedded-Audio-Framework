@@ -12,6 +12,7 @@ static eaf_sem_t ready;
 static eaf_bt_ingress_t bt;
 static eaf_lms_parser_t lms;
 static int packets;
+static int scheduling_result;
 extern unsigned eaf_mock_commits;
 extern int32_t eaf_mock_last;
 extern bool eaf_mock_fail_write, eaf_mock_fail_start, eaf_mock_fail_drop, eaf_mock_fail_drain;
@@ -34,6 +35,48 @@ static void producer(void *ctx) {
     eaf_reservoir_finish(&reservoir);
     hal_sem_give(&ready);
 }
+static void scheduling_worker(void *ctx) {
+    const int *priority = ctx;
+    scheduling_result = k_thread_priority_get(k_current_get()) == *priority ? EAF_OK : EAF_IO;
+    hal_sem_give(&ready);
+}
+static int scheduling_smoke(void) {
+    if (hal_sem_take(&ready, 0) != EAF_TIMEOUT)
+        return EAF_IO;
+    uint64_t before = hal_monotonic_time_us();
+    if (hal_sem_take(&ready, 10) != EAF_TIMEOUT || hal_monotonic_time_us() - before < 10000u)
+        return EAF_IO;
+    hal_sem_give(&ready);
+    hal_sem_give(&ready);
+    if (hal_sem_take(&ready, 0) || hal_sem_take(&ready, 0) != EAF_TIMEOUT)
+        return EAF_IO;
+    for (unsigned i = 0; i < 8; ++i) {
+        eaf_thread_t thread = {0};
+        eaf_thread_options_t options = {i & 1u ? EAF_THREAD_AUDIO : EAF_THREAD_DECODER, -1, false};
+        int priority = i & 1u ? CONFIG_EAF_AUDIO_PRIORITY : CONFIG_EAF_DECODER_PRIORITY;
+        int rc = hal_thread_create_with_options(&thread, scheduling_worker, &priority, &options);
+        if (rc)
+            return rc;
+        int waited = hal_sem_take(&ready, 1000);
+        int joined = hal_thread_join(&thread);
+        if (waited || joined || scheduling_result)
+            return EAF_IO;
+    }
+    eaf_thread_t thread = {0};
+    eaf_thread_options_t options = {EAF_THREAD_AUDIO, 0, false};
+#ifndef CONFIG_SCHED_CPU_MASK
+    if (hal_thread_create_with_options(&thread, scheduling_worker, NULL, &options) !=
+            EAF_UNSUPPORTED ||
+        thread.impl)
+        return EAF_IO;
+#else
+    int priority = CONFIG_EAF_AUDIO_PRIORITY;
+    if (hal_thread_create_with_options(&thread, scheduling_worker, &priority, &options) ||
+        hal_sem_take(&ready, 1000) || hal_thread_join(&thread) || scheduling_result)
+        return EAF_IO;
+#endif
+    return EAF_OK;
+}
 int main(void) {
     eaf_format_t fmt = {48000, 2, 3};
     eaf_sink_t sink = {&eaf_null_sink_ops, &sink_ctx};
@@ -42,6 +85,8 @@ int main(void) {
     int rc = eaf_reservoir_init(&reservoir, storage, 128, fmt, 64);
     if (!rc)
         rc = hal_sem_init(&ready);
+    if (!rc)
+        rc = scheduling_smoke();
     if (!rc)
         rc = eaf_pipeline_init(&pipeline, &config);
     if (!rc)

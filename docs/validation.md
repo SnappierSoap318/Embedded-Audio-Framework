@@ -220,3 +220,20 @@ hard-real-time deadline or long-duration audio-quality validation was performed.
 These results do not validate physical ESP32 output, Bluetooth radio, hardware
 presentation latency, or a complete LMS playback session. The real server and
 speakers were not disturbed during these regressions.
+
+## T04 software validation — 2026-09-11
+
+- ALSA + OI SBC Clang ASan/UBSan: 20/20 CTests, including `hal_os`.
+- Separate Clang TSan: `hal_os` and `lms_startup` pass. HAL tests include 5,000
+  wake/ack handshakes, binary coalescing, monotonic timeout with injected EINTR,
+  actual Linux affinity and deterministic FIFO-denial cleanup for both roles.
+- Zephyr 4.3.0 native_sim: scheduling/I2S/SBC/A2DP smoke PASS both with CPU-mask
+  support disabled (`build-zephyr-bt-lms`) and enabled (`build-zephyr-affinity`).
+  Checks role priorities, timeout/poll behavior and eight thread-slot reuse cycles.
+- clang-format, clang-tidy and clangd: host 39 translation units and both Zephyr
+  configurations 22 each, with no failed checks.
+
+FIFO attributes and denied creation are tested without requiring privileged RT
+execution. Native affinity-enabled smoke uses only CPU 0; ESP32 SMP placement,
+radio contention and wake/compute timing have not been measured. T04 remains open
+for those physical scheduling acceptance results.

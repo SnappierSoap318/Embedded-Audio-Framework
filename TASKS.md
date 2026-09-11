@@ -42,6 +42,10 @@ There is no fixed finish date until these scopes and hardware gates are validate
 - [ ] **T04 — Complete HAL scheduling contract.** Monotonic waits, distinct decoder
   and audio priorities, optional affinity, bounded wakeups. Verify timeout behavior,
   semaphore races and contention; measure scheduling margin on ESP32.
+  Software implemented: monotonic timeout result, role-aware preemptive priorities,
+  optional CPU affinity, checked Linux FIFO requests, and host/Zephyr regression
+  tests. Remaining acceptance: measure wake latency/DSP margin on the ESP32 under
+  simultaneous Wi-Fi/BT load; keep T04 open until those results are recorded.
 
 ## First bench: WROOM + MAX98357 — P0/P1
 

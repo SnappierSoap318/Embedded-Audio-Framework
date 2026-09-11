@@ -108,3 +108,34 @@ Source guards now include public headers and native adapter/player translation
 units. POSIX command-line bootstrap is an explicit harness exception. Compile and
 test both backend configurations; third-party allocation, board deadlines and
 physical presentation remain separate acceptance gates.
+
+## T04 scheduling and wake contract
+
+`hal_thread_create_with_options` adds decoder/audio roles, optional CPU index
+(-1 means unrestricted), and an explicit Linux realtime request. Existing create
+calls retain decoder defaults. Linux ordinary workers explicitly use SCHED_OTHER;
+FIFO is opt-in with audio priority 20 and decoder 10, and permission/configuration
+failure returns EAF_IO without running the callback or retaining an allocated handle.
+The native LMS consumer now declares its audio role; its default remains ordinary
+Linux scheduling. Thread attributes apply before entry, including CPU affinity.
+
+Zephyr uses separate Kconfig audio/decoder preemptive priorities (3/5 by default),
+asserting that audio outranks decoder and both are valid. Creation holds the thread
+until optional CPU pinning succeeds; unsupported pinning returns EAF_UNSUPPORTED.
+The legacy EAF_THREAD_PRIORITY setting is replaced by EAF_AUDIO_PRIORITY and
+EAF_DECODER_PRIORITY. Board applications must assign their audio worker role;
+creating a decoder does not change the priority of the application main thread.
+
+Binary semaphore wakeups coalesce and require a caller-owned atomic predicate.
+Linux now uses sem_clockwait with CLOCK_MONOTONIC (checked at configure time), with
+one absolute deadline retained through EINTR. Zephyr uses uptime-based kernel
+waits. Zero timeout polls; expiry returns EAF_TIMEOUT, distinct from invalid inputs
+or OS errors. Give tolerates an uninitialized/null handle. Init/deinit require
+quiescent callers, and deinit is forbidden while waiters exist. Deadlines bound the
+requested blocking interval, not scheduler dispatch latency; join is still a
+blocking teardown operation after cooperative worker cancellation.
+
+Host regression covers coalescing, interrupted timeout, 5,000 semaphore handshakes,
+actual allowed-CPU pinning and denied FIFO creation with both role priorities.
+Zephyr smoke checks role priorities, pool reuse, timeout and optional affinity.
+Hardware measurements under radio contention are required before closing T04.

@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 #include <eaf/eaf_hal.h>
 #include <errno.h>
 #include <pthread.h>
@@ -20,14 +20,43 @@ static void *thread_entry(void *arg) {
     return NULL;
 }
 int hal_thread_create(eaf_thread_t *thread, void (*entry)(void *), void *arg) {
-    if (!thread || thread->impl || !entry)
+    const eaf_thread_options_t options = {EAF_THREAD_DECODER, -1, false};
+    return hal_thread_create_with_options(thread, entry, arg, &options);
+}
+int hal_thread_create_with_options(eaf_thread_t *thread, void (*entry)(void *), void *arg,
+                                   const eaf_thread_options_t *options) {
+    if (!thread || thread->impl || !entry || !options ||
+        (options->role != EAF_THREAD_DECODER && options->role != EAF_THREAD_AUDIO) ||
+        options->cpu < -1 || options->cpu >= CPU_SETSIZE)
         return EAF_INVALID;
     thread_impl *t = calloc(1, sizeof(*t));
     if (!t)
         return EAF_IO;
     t->entry = entry;
     t->arg = arg;
-    if (pthread_create(&t->id, NULL, thread_entry, t)) {
+    pthread_attr_t attr;
+    if (pthread_attr_init(&attr)) {
+        free(t);
+        return EAF_IO;
+    }
+    /* Explicit ordinary policy avoids accidentally inheriting an RT creator. */
+    struct sched_param scheduling = {
+        .sched_priority = options->realtime ? (options->role == EAF_THREAD_AUDIO ? 20 : 10) : 0};
+    int rc = pthread_attr_setinheritsched(&attr, PTHREAD_EXPLICIT_SCHED);
+    if (!rc)
+        rc = pthread_attr_setschedpolicy(&attr, options->realtime ? SCHED_FIFO : SCHED_OTHER);
+    if (!rc)
+        rc = pthread_attr_setschedparam(&attr, &scheduling);
+    if (!rc && options->cpu >= 0) {
+        cpu_set_t cpus;
+        CPU_ZERO(&cpus);
+        CPU_SET((unsigned)options->cpu, &cpus);
+        rc = pthread_attr_setaffinity_np(&attr, sizeof(cpus), &cpus);
+    }
+    if (!rc)
+        rc = pthread_create(&t->id, &attr, thread_entry, t);
+    (void)pthread_attr_destroy(&attr);
+    if (rc) {
         free(t);
         return EAF_IO;
     }
@@ -63,7 +92,7 @@ int hal_sem_take(eaf_sem_t *sem, uint32_t timeout_ms) {
         return EAF_INVALID;
     sem_impl *s = sem->impl;
     struct timespec ts;
-    if (clock_gettime(CLOCK_REALTIME, &ts))
+    if (clock_gettime(CLOCK_MONOTONIC, &ts))
         return EAF_IO;
     ts.tv_sec += (time_t)(timeout_ms / 1000u);
     ts.tv_nsec += (long)(timeout_ms % 1000u) * 1000000L;
@@ -73,14 +102,16 @@ int hal_sem_take(eaf_sem_t *sem, uint32_t timeout_ms) {
     }
     int rc;
     do {
-        rc = sem_timedwait(&s->sem, &ts);
+        rc = sem_clockwait(&s->sem, CLOCK_MONOTONIC, &ts);
     } while (rc && errno == EINTR);
     if (rc)
-        return EAF_IO;
+        return errno == ETIMEDOUT ? EAF_TIMEOUT : EAF_IO;
     atomic_store_explicit(&s->pending, false, memory_order_release);
     return EAF_OK;
 }
 void hal_sem_give(eaf_sem_t *sem) {
+    if (!sem || !sem->impl)
+        return;
     sem_impl *s = sem->impl;
     if (!atomic_exchange_explicit(&s->pending, true, memory_order_acq_rel))
         (void)sem_post(&s->sem);

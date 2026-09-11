@@ -12,10 +12,14 @@ config EAF_THREAD_STACK_SIZE
 	int "Worker stack size in bytes"
 	default 4096
 	range 2048 65536
-config EAF_THREAD_PRIORITY
-	int "Worker preemptive priority (audio owner should have higher priority)"
+config EAF_DECODER_PRIORITY
+	int "Decoder preemptive priority"
 	default 5
 	range 0 14
+config EAF_AUDIO_PRIORITY
+	int "Audio preemptive priority (must be lower numerically than decoder)"
+	default 3
+	range 0 13
 config EAF_SEM_COUNT
 	int "Maximum EAF binary wake semaphores"
 	default 4

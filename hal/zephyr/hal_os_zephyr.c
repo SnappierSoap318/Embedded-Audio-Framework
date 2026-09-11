@@ -1,7 +1,10 @@
 #include <eaf/eaf_hal.h>
+#include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
-BUILD_ASSERT(CONFIG_EAF_THREAD_PRIORITY < CONFIG_NUM_PREEMPT_PRIORITIES,
+BUILD_ASSERT(CONFIG_EAF_AUDIO_PRIORITY < CONFIG_EAF_DECODER_PRIORITY,
+             "Audio must outrank the decoder");
+BUILD_ASSERT(CONFIG_EAF_DECODER_PRIORITY < CONFIG_NUM_PREEMPT_PRIORITIES,
              "EAF worker priority must exist in the kernel configuration");
 /* Statically backed pools; exhaustion is explicit, never falls back to heap. */
 typedef struct {
@@ -24,22 +27,43 @@ static void entry_bridge(void *a, void *b, void *c) {
     slot->entry(slot->arg);
 }
 int hal_thread_create(eaf_thread_t *thread, void (*entry)(void *), void *arg) {
-    if (!thread || thread->impl || !entry)
+    const eaf_thread_options_t options = {EAF_THREAD_DECODER, -1, false};
+    return hal_thread_create_with_options(thread, entry, arg, &options);
+}
+int hal_thread_create_with_options(eaf_thread_t *thread, void (*entry)(void *), void *arg,
+                                   const eaf_thread_options_t *options) {
+    if (!thread || thread->impl || !entry || !options ||
+        (options->role != EAF_THREAD_DECODER && options->role != EAF_THREAD_AUDIO) ||
+        options->cpu < -1 || options->cpu >= CONFIG_MP_MAX_NUM_CPUS)
         return EAF_INVALID;
+#ifndef CONFIG_SCHED_CPU_MASK
+    if (options->cpu >= 0)
+        return EAF_UNSUPPORTED;
+#endif
+    int priority =
+        options->role == EAF_THREAD_AUDIO ? CONFIG_EAF_AUDIO_PRIORITY : CONFIG_EAF_DECODER_PRIORITY;
     for (size_t i = 0; i < CONFIG_EAF_THREAD_COUNT; ++i) {
         thread_slot *s = &threads[i];
         if (!atomic_cas(&s->busy, 0, 1))
             continue;
         s->entry = entry;
         s->arg = arg;
-        k_tid_t id = k_thread_create(&s->thread, stacks[i], K_THREAD_STACK_SIZEOF(stacks[i]),
-                                     entry_bridge, s, NULL, NULL,
-                                     K_PRIO_PREEMPT(CONFIG_EAF_THREAD_PRIORITY), 0, K_NO_WAIT);
+        k_tid_t id =
+            k_thread_create(&s->thread, stacks[i], K_THREAD_STACK_SIZEOF(stacks[i]), entry_bridge,
+                            s, NULL, NULL, K_PRIO_PREEMPT(priority), 0, K_FOREVER);
         if (!id) {
             atomic_clear(&s->busy);
             return EAF_IO;
         }
+#ifdef CONFIG_SCHED_CPU_MASK
+        if (options->cpu >= 0 && k_thread_cpu_pin(id, options->cpu)) {
+            k_thread_abort(id);
+            atomic_clear(&s->busy);
+            return EAF_IO;
+        }
+#endif
         thread->impl = s;
+        k_thread_start(id);
         return EAF_OK;
     }
     return EAF_IO;
@@ -74,7 +98,8 @@ int hal_sem_take(eaf_sem_t *sem, uint32_t timeout_ms) {
     if (!sem || !sem->impl)
         return EAF_INVALID;
     sem_slot *s = sem->impl;
-    return k_sem_take(&s->sem, K_MSEC(timeout_ms)) ? EAF_IO : EAF_OK;
+    int rc = k_sem_take(&s->sem, K_MSEC(timeout_ms));
+    return !rc ? EAF_OK : ((rc == -EAGAIN || rc == -EBUSY) ? EAF_TIMEOUT : EAF_IO);
 }
 void hal_sem_give(eaf_sem_t *sem) {
     if (sem && sem->impl) {

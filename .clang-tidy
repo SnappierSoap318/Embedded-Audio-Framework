@@ -2,4 +2,4 @@ Checks: '-*,clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,-c
 WarningsAsErrors: '*'
 HeaderFilterRegex: '(^|/)(include/eaf|core|apps|hal)/'
 CheckOptions:
-  bugprone-reserved-identifier.AllowedIdentifiers: '_POSIX_C_SOURCE;_FILE_OFFSET_BITS;__real_.*;__wrap_.*'
+  bugprone-reserved-identifier.AllowedIdentifiers: '_GNU_SOURCE;_POSIX_C_SOURCE;_FILE_OFFSET_BITS;__real_.*;__wrap_.*'

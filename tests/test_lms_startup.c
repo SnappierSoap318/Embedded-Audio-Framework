@@ -16,10 +16,13 @@ static int guarded_stop(eaf_sink_t *s) {
     return reject_stop ? EAF_IO : eaf_null_sink_ops.stop(s);
 }
 static atomic_uint commits;
-int __real_hal_thread_create(eaf_thread_t *, void (*)(void *), void *);
-int __wrap_hal_thread_create(eaf_thread_t *thread, void (*entry)(void *), void *ctx) {
+int __real_hal_thread_create_with_options(eaf_thread_t *, void (*)(void *), void *,
+                                          const eaf_thread_options_t *);
+int __wrap_hal_thread_create_with_options(eaf_thread_t *thread, void (*entry)(void *), void *ctx,
+                                          const eaf_thread_options_t *options) {
     CHECK(pipeline.state == EAF_CONFIGURED);
-    return reject_create ? EAF_IO : __real_hal_thread_create(thread, entry, ctx);
+    return reject_create ? EAF_IO
+                         : __real_hal_thread_create_with_options(thread, entry, ctx, options);
 }
 void *__real_malloc(size_t);
 void *__real_calloc(size_t, size_t);
