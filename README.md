@@ -28,7 +28,8 @@ headroom, an 80 Hz crossover, a bypassed EQ and unity master volume. The null
 sink discards audio; this demo does not play through a sound card.
 `eaf_play` reads mono/stereo 16/24/32-bit PCM WAV files through the same timed
 null sink, reports source frames consumed, and exits after the final block.
-It also produces no audible output. Python 3, when available, enables an
+With no device argument it produces no audible output. If ALSA development files
+are installed, `eaf_play file.wav default` selects the default audio device. Python 3, when available, enables an
 additional CTest that generates files and exercises the executable.
 
 ```sh
@@ -85,8 +86,10 @@ allocations in shared system libraries or establish a whole-process heap bound.
 The Zephyr module, static HAL, I2S adapter and native_sim smoke are now available.
 The TCP/HTTP raw-PCM LMS client, SBC ingress and decoder worker are shared
 between Zephyr and host tests. Optional OI SBC decoding runs in native_sim.
-`eaf_lms_play SERVER_IPV4 [seconds]` registers a test player with timed null output
-for live-server PCM and immediate pause/resume testing. See [embedded setup and scope](docs/embedded.md).
+`eaf_lms_play SERVER_IPV4 [seconds] [ALSA_DEVICE]` registers an LMS player.
+Use `eaf_lms_play 192.168.11.132 300 default` for default ALSA output; omitting
+the device retains timed null output. LMS volume and mute apply at block boundaries.
+See [Linux audio setup](docs/linux-audio.md) and [Bluetooth binding](docs/bluetooth.md). See [embedded setup and scope](docs/embedded.md).
 `west.yml` pins Zephyr 4.3.0; the sample adds this repository as an extra module.
 
 ## Scope
@@ -94,6 +97,6 @@ for live-server PCM and immediate pause/resume testing. See [embedded setup and 
 Implemented paths include native file playback, Zephyr kernel/HAL integration,
 and a stereo I2S adapter tested with a simulated device. Full LMS transport/HTTP
 player integration, Bluetooth pairing/profile negotiation and LC3 decoding, compressed
-file codecs, PLL/ASRC synchronization, ALSA and board-specific codec bring-up
+file codecs, PLL/ASRC synchronization and board-specific codec bring-up
 remain unfinished. Neither native_sim nor host tests establish physical DMA
 or multi-room timing guarantees.

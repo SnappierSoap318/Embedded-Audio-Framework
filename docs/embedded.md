@@ -155,8 +155,9 @@ The optional OI adapter validates frame CRCs and upmixes mono to stereo before
 Q1.31 conversion. A corrupt frame rejects the rest of that packet; earlier valid
 frames may already have been published. A zero return can mean backpressure or
 an empty queue; arrange worker wakeups rather than spinning at audio priority.
-Endpoint registration, codec negotiation, pairing and radio enablement remain
-unimplemented.
+A fixed-rate Zephyr Classic A2DP endpoint and negotiation binding is now
+implemented; see [Bluetooth integration](bluetooth.md). Pairing, radio enablement
+and board application integration remain work.
 
 Classic A2DP requires a BR/EDR controller supported by the chosen Zephyr board.
 LE Audio requires a different profile and LC3 path. Board/controller and desired
@@ -236,8 +237,10 @@ Select the registered SqueezePlay player, ID `02:ea:f0:00:00:01`, in the UI and
 start a track. Run only one instance with this fixed test ID. The client advertises
 PCM only, so the server must supply supported raw PCM or transcode into it.
 
-This harness uses a separate audio thread, a fixed reservoir, and timed null
-output: **there is no audible sound**. Stream changes join the old worker before
+This harness uses a separate audio thread and a fixed reservoir. With no device
+argument it uses inaudible timed null output. Append `default` (or an ALSA PCM
+name) to enable audio; see [Linux audio](linux-audio.md). LMS `audg` now controls
+stereo master gain/mute through an atomic handoff to the audio owner. Stream changes join the old worker before
 resetting the graph. Pause acknowledges at an output block boundary; resume shifts
 the null-sink deadline to avoid trying to catch up through the pause interval.
 Output snapshots report committed source frames, excluding startup silence.
@@ -247,6 +250,6 @@ Tested against the user's Lyrion Music Server 9.1.1: player registration,
 44.1 kHz stereo PCM stream, pause with a stationary server position, resume,
 and stop. The observed stopped stream consumed 306,176 frames with zero underruns.
 The test player was stopped after testing. Server-side seek offsets and elapsed
-position accuracy, volume (`audg` is currently ignored), end-of-track advancement,
+position accuracy, end-of-track advancement,
 automatic reconnect and long-run stability still require work. Do not infer
 speaker timing or audible quality from these results.

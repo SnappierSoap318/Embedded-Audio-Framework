@@ -16,11 +16,12 @@ increments; hardware and protocol claims require their own integration tests.
    Autostart/cont gates and an output-snapshot status API are now implemented.
    Immediate pause/resume and a native output-owner harness now work against
    Lyrion 9.1.1 with raw PCM and null output. Next: embedded owner integration,
-   volume, track completion, automatic reconnect and FLAC.
+   track completion, automatic reconnect and FLAC. ALSA output and LMS
+   stereo volume/mute now work in the Linux harness.
 3. **Bluetooth endpoint (started):** bounded SBC packet ingress and decode worker
    with discontinuity resets, CRC rejection and partial reservoir writes. Optional
    OI SBC decoding runs on Linux and Zephyr native_sim. Next: confirm controller,
-   bind Zephyr A2DP endpoint/negotiation callbacks and test with a phone. Radio,
+   test the new fixed-rate Zephyr A2DP endpoint binding with a phone. Radio,
    pairing and LE Audio/LC3 remain unimplemented.
 4. **Clock synchronization:** define PTS and clock domains, presentation scheduling,
    bounded PI control, ASRC/hardware-PLL backends and +/-100 ppm tests. Required
@@ -28,8 +29,8 @@ increments; hardware and protocol claims require their own integration tests.
 5. **Supporting playback:** native WAV source/player, EOF/seek/gain queue and
    host tests already work. FLAC 1.5.0, mpg123 1.32.10 and Opus 1.6 are visible
    through pkg-config. Native ALSA is optional listening/debug infrastructure,
-   not a prerequisite for the embedded milestones. Its headers/pkg-config entry
-   are still absent in this environment. Codec adapters and dither remain work.
+   not a prerequisite for the embedded milestones. ALSA 1.2.16.1 is installed and the optional
+   PCM output is implemented. Codec adapters and dither remain work.
 6. **Hardware qualification:** board-specific codec, PSRAM/cache, I2S clocks and
    DMA validation; long-running network/Bluetooth stress, discontinuity tests,
    GPIO timing and multi-room phase measurements.

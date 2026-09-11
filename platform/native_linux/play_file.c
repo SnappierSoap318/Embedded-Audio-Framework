@@ -3,6 +3,10 @@
 #include <eaf/eaf_sink_null.h>
 #include <eaf/eaf_wav.h>
 #include <stdio.h>
+#ifdef EAF_HAVE_ALSA
+#include <eaf/eaf_sink_alsa.h>
+static eaf_alsa_sink_ctx_t alsa;
+#endif
 static eaf_file_t file;
 static eaf_wav_t wav;
 static eaf_source_t source;
@@ -16,9 +20,18 @@ static eaf_volume_ctx_t volume = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};
 static eaf_node_t master = {"volume", EAF_NODE_STAGE_POST_PROCESS, &eaf_volume_ops, &volume};
 static eaf_node_t *const nodes[] = {&master};
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        fprintf(stderr, "Usage: %s file.wav (timed null output)\n", argv[0]);
+    if (argc != 2 && argc != 3) {
+        fprintf(stderr, "Usage: %s file.wav [ALSA_DEVICE] (default: timed null)\n", argv[0]);
         return 2;
+    }
+    if (argc == 3) {
+#ifdef EAF_HAVE_ALSA
+        alsa.device = argv[2];
+        sink = (eaf_sink_t){&eaf_alsa_sink_ops, &alsa};
+#else
+        fprintf(stderr, "ALSA support was not built\n");
+        return 2;
+#endif
     }
     eaf_reader_t reader;
     eaf_pipeline_config_t config = {&reservoir, nodes, 1, &sink};

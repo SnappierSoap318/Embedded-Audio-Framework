@@ -1,5 +1,24 @@
 # Native validation
 
+## ALSA, LMS volume and Zephyr A2DP binding — 2026-09-11
+
+- All 14 ASan/UBSan tests passed, including real ALSA null/file plugin capture,
+  exact stereo gain/mute sample bytes, pause/resume, restart and player EOF drain.
+- The simulated LMS peer validates fragmented audg packets, independent gains,
+  mute, adjust-disabled unity, over-unity capping and malformed-length rejection.
+- A 4,800-frame silent stereo WAV at 48 kHz opened and drained the system default
+  ALSA device with zero reservoir underruns. This does not validate listening
+  quality or precise presentation timing. ALSA version: 1.2.16.1.
+- Zephyr native_sim smoke passes with the A2DP adapter's mock-registration callback
+  tests. These verify pinned API compilation, codec rejection, receive gating,
+  owned payload copies and discontinuity; no physical Bluetooth radio was used.
+- Clang checks pass for 32 host and 22 Zephyr translation units. Linux also builds
+  with ALSA disabled. External ALSA/codec internals are outside static checks.
+
+See [Linux audio](linux-audio.md) and [Bluetooth binding](bluetooth.md) for usage
+and remaining device/application integration work.
+
+
 ## Formatting and static checks — 2026-09-11
 
 Clang 22.1.8: clang-format verification plus clang-tidy/clangd checks passed for

@@ -40,6 +40,11 @@ def case(width, big, failure=None, autostart=1):
                 peer.settimeout(10)
                 opcode, hello = packet(peer)
                 assert opcode == b"HELO" and b"pcm" in hello
+                for adjust, left, right in [(1, 65536, 65536), (1, 32768, 0),
+                                            (1, 131072, 1), (0, 0, 0)]:
+                    gain = bytearray(26); gain[:4] = b"audg"; gain[12] = adjust
+                    struct.pack_into(">II", gain, 18, left, right)
+                    send_packet(peer, gain)
                 request = b"GET /stream.pcm HTTP/1.0\r\nHost: localhost\r\n\r\n"
                 start = bytearray(28)
                 start[:4] = b"strm"; start[4:11] = bytes([ord('s'), ord('0') + autostart, ord('p'),
@@ -168,3 +173,5 @@ rejected_gate(b"cont" + struct.pack(">IB", 16, 0))
 scheduled = bytearray(28); scheduled[:5] = b"strmu"
 struct.pack_into(">I", scheduled, 18, 100)
 rejected_gate(scheduled)
+
+rejected_gate(b"audg" + bytes(21))

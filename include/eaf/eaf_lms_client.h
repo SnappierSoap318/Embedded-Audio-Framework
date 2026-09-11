@@ -14,6 +14,9 @@ typedef struct {
     /* Optional synchronous handoff to output owner. Preserve queued PCM.
        Return only after pause/resume takes effect; no timed pauses supported. */
     int (*pause)(void *, bool paused);
+    /* Optional stereo master gain, Q1.31 [0, INT32_MAX], exact unity at INT32_MAX.
+       Transport thread must hand off to the audio owner, not mutate live DSP. */
+    int (*volume)(void *, int32_t left, int32_t right);
 } eaf_lms_callbacks_t;
 typedef struct {
     uint32_t elapsed_ms, buffer_bytes, queued_bytes;

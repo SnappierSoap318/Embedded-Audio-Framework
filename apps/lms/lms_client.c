@@ -49,6 +49,19 @@ static void stop_stream(eaf_lms_client_t *c) {
 }
 static int command(void *ctx, const uint8_t *p, size_t n) {
     eaf_lms_client_t *c = ctx;
+    if (memcmp(p, "audg", 4) == 0) {
+        if (n != 26u)
+            return EAF_INVALID;
+        int32_t gains[2];
+        for (size_t ch = 0; ch < 2; ++ch) {
+            const uint8_t *v = p + 18u + ch * 4u;
+            uint32_t raw = (uint32_t)v[0] << 24 | (uint32_t)v[1] << 16 | (uint32_t)v[2] << 8 | v[3];
+            /* LMS uses unsigned 16.16. No amplification in the master stage. */
+            gains[ch] = !p[12] || raw >= 65536u ? INT32_MAX : (int32_t)(raw << 15);
+        }
+        return c->callbacks.volume ? c->callbacks.volume(c->callbacks.ctx, gains[0], gains[1])
+                                   : EAF_OK;
+    }
     if (!memcmp(p, "cont", 4)) {
         if (n < 9u)
             return EAF_INVALID;
