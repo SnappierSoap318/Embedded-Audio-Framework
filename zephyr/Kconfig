@@ -29,6 +29,12 @@ config EAF_I2S
 config EAF_LMS_CLIENT
 	bool "LMS TCP/HTTP raw PCM client"
 	depends on EAF_LMS && NET_SOCKETS
+config EAF_BT_A2DP
+	bool "Zephyr Classic A2DP SBC sink binding"
+	depends on EAF_BT_INGRESS && BT_CLASSIC && BT_A2DP_SINK
+	help
+	  Register a fixed-rate SBC endpoint and copy incoming media to EAF.
+	  The board application owns SDP, pairing and decoder/audio workers.
 config EAF_BT_SBC
 	bool "SBC decode worker"
 	depends on EAF_BT_INGRESS && ZEPHYR_LIBSBC_MODULE

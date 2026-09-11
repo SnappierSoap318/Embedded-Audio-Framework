@@ -16,6 +16,7 @@ extern unsigned eaf_mock_commits;
 extern int32_t eaf_mock_last;
 extern bool eaf_mock_fail_write;
 extern int eaf_sbc_smoke(void);
+extern int eaf_bt_smoke(void);
 static int packet(void *ctx, const uint8_t *data, size_t length) {
     (void)ctx;
     (void)data;
@@ -103,6 +104,8 @@ int main(void) {
     tx->ops->deinit(tx);
     if (!rc)
         rc = eaf_sbc_smoke();
+    if (rc == EAF_OK)
+        rc = eaf_bt_smoke();
     printk("EAF smoke %s (%d)\n", rc ? "FAIL" : "PASS", rc);
     return rc;
 }
