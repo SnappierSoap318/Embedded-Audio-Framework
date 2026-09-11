@@ -1,0 +1,15 @@
+sample:
+  name: EAF static HAL and audio smoke
+common:
+  tags: audio
+  harness: console
+  harness_config:
+    type: one_line
+    regex:
+      - "EAF smoke PASS"
+tests:
+  eaf.smoke:
+    platform_allow:
+      - native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64

@@ -1,0 +1,44 @@
+menuconfig EAF
+	bool "Embedded Audio Framework"
+	default y
+	select REQUIRES_STD_C11
+
+if EAF
+config EAF_THREAD_COUNT
+	int "Maximum simultaneous EAF worker threads"
+	default 2
+	range 1 8
+config EAF_THREAD_STACK_SIZE
+	int "Worker stack size in bytes"
+	default 4096
+	range 2048 65536
+config EAF_THREAD_PRIORITY
+	int "Worker preemptive priority (audio owner should have higher priority)"
+	default 5
+	range 0 14
+config EAF_SEM_COUNT
+	int "Maximum EAF binary wake semaphores"
+	default 4
+	range 1 16
+config EAF_LMS
+	bool "Bounded SlimProto control protocol"
+	default y
+config EAF_I2S
+	bool "Static stereo I2S TX sink"
+	depends on I2S
+config EAF_LMS_CLIENT
+	bool "LMS TCP/HTTP raw PCM client"
+	depends on EAF_LMS && NET_SOCKETS
+config EAF_BT_SBC
+	bool "SBC decode worker"
+	depends on EAF_BT_INGRESS && ZEPHYR_LIBSBC_MODULE
+	select LIBSBC_DECODER
+config EAF_I2S_MAX_FRAMES
+	int "Maximum I2S block frames"
+	default 256
+	range 32 1024
+	depends on EAF_I2S
+config EAF_BT_INGRESS
+	bool "Bounded Bluetooth SBC media ingress"
+	default y
+endif
