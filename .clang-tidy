@@ -1,0 +1,5 @@
+Checks: '-*,clang-analyzer-*,bugprone-*,-bugprone-easily-swappable-parameters,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling'
+WarningsAsErrors: '*'
+HeaderFilterRegex: '(^|/)(include/eaf|core|apps|hal)/'
+CheckOptions:
+  bugprone-reserved-identifier.AllowedIdentifiers: '_POSIX_C_SOURCE;_FILE_OFFSET_BITS;__real_.*;__wrap_.*'

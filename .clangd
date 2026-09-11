@@ -1,0 +1,6 @@
+CompileFlags:
+  CompilationDatabase: build-lint
+Diagnostics:
+  ClangTidy:
+    Add: [clang-analyzer-*, bugprone-*]
+    Remove: [bugprone-easily-swappable-parameters, clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling]
