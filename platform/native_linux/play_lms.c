@@ -1,10 +1,8 @@
 /* LMS Linux player with timed null or optional ALSA output. */
+#include "native_output.h"
 #include <arpa/inet.h>
 #include <eaf/eaf_core.h>
 #include <eaf/eaf_dsp.h>
-#ifdef EAF_HAVE_ALSA
-#include <eaf/eaf_sink_alsa.h>
-#endif
 #include <eaf/eaf_lms_client.h>
 #include <eaf/eaf_sink_null.h>
 #include <signal.h>
@@ -18,10 +16,6 @@ static eaf_pipeline_t pipeline;
 static int32_t storage[CAPACITY * 2u];
 static eaf_null_sink_ctx_t sink_ctx;
 static eaf_sink_t sink = {&eaf_null_sink_ops, &sink_ctx};
-#ifdef EAF_HAVE_ALSA
-static eaf_alsa_sink_ctx_t alsa;
-static bool use_alsa;
-#endif
 static eaf_volume_ctx_t volume = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};
 static eaf_node_t master = {"LMS volume", EAF_NODE_STAGE_POST_PROCESS, &eaf_volume_ops, &volume};
 static eaf_node_t *const nodes[] = {&master};
@@ -70,25 +64,17 @@ static void consume(void *ctx) {
         hal_sleep_ms(1);
     while (!hal_atomic_get(&quit)) {
         if (hal_atomic_get(&pause_request)) {
-            uint64_t before = hal_monotonic_time_us();
-#ifdef EAF_HAVE_ALSA
-            if (use_alsa && eaf_alsa_pause(&alsa, true)) {
+            if (eaf_native_output_pause(&sink, true)) {
                 hal_atomic_set(&failed, 1);
                 break;
             }
-#endif
             hal_atomic_set(&pause_ack, 1);
             while (hal_atomic_get(&pause_request) && !hal_atomic_get(&quit))
                 hal_sleep_ms(1);
-#ifdef EAF_HAVE_ALSA
-            if (use_alsa) {
-                if (eaf_alsa_pause(&alsa, false)) {
-                    hal_atomic_set(&failed, 1);
-                    break;
-                }
-            } else
-#endif
-                sink_ctx.epoch_us += hal_monotonic_time_us() - before;
+            if (eaf_native_output_pause(&sink, false)) {
+                hal_atomic_set(&failed, 1);
+                break;
+            }
             hal_atomic_set(&pause_ack, 0);
             continue;
         }
@@ -99,12 +85,8 @@ static void consume(void *ctx) {
             break;
         }
         uint64_t presented = reservoir.frames_read;
-#ifdef EAF_HAVE_ALSA
-        if (use_alsa) {
-            uint32_t delay = eaf_alsa_delay(&alsa);
-            presented = presented > delay ? presented - delay : 0;
-        }
-#endif
+        uint32_t delay = eaf_native_output_delay(&sink);
+        presented = presented > delay ? presented - delay : 0;
         hal_atomic_set(&elapsed, (uint32_t)(presented * 1000u / reservoir.format.sample_rate));
         if (presented)
             hal_atomic_set(&played, 1);
@@ -209,15 +191,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Usage: %s SERVER_IPV4 [seconds: 1..86400] [ALSA_DEVICE]\n", argv[0]);
         return 2;
     }
-    if (argc == 4) {
-#ifdef EAF_HAVE_ALSA
-        use_alsa = true;
-        alsa.device = argv[3];
-        sink = (eaf_sink_t){&eaf_alsa_sink_ops, &alsa};
-#else
-        fprintf(stderr, "ALSA support was not built\n");
+    if (eaf_native_output_select(&sink, argc == 4 ? argv[3] : NULL)) {
+        fprintf(stderr, "Requested output is unavailable in this build\n");
         return 2;
-#endif
     }
     setvbuf(stdout, NULL, _IOLBF, 0);
     signal(SIGINT, on_signal);

@@ -52,3 +52,25 @@ and add an independent failing regression before correcting behavior. CTest's
 `architecture` case guards portable source boundaries. Hardware results must be
 recorded separately from simulator/host passes. See `docs/audit.md` for the
 squeezelite-esp32 reference-test methodology.
+
+## Architecture and backend checks
+
+[Architecture v0.5](architecture-v0.5.md) defines current ownership/lifecycle
+contracts. `arch_example` compiles and runs its finite-source example. The native
+players link a CMake-selected ALSA/null adapter and have no feature preprocessor
+branches. Check the fallback explicitly, even on machines with ALSA installed:
+
+```sh
+cmake -S . -B build-no-alsa -DEAF_ENABLE_ALSA=OFF -DBUILD_TESTING=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build-no-alsa
+ctest --test-dir build-no-alsa --output-on-failure
+python3 tools/check_code.py build-no-alsa
+```
+
+`sink_lifecycle` injects partial init, START, write and cleanup failures;
+`alsa_failures` injects write/DROP/drain failures and a deterministic drain deadline.
+Zephyr smoke repeats write/START/DROP errors beyond the four-slot pool capacity,
+then tests EOS drain failure and success. These mocks check software ownership;
+ESP32 DMA timing, actual EOF tail and driver starvation recovery remain board gates.
+Sink implementers must return checked errors from deinit and preserve a retry-safe
+context. Update custom sink operation tables for the new `int` return signature.

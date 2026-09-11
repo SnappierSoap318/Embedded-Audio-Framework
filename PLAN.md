@@ -1,6 +1,7 @@
 # Implementation plan
 
-The v0.4 architecture is the product direction. Build and validate it in these
+The v0.4 architecture is the product direction;
+[architecture v0.5](docs/architecture-v0.5.md) defines current contracts. Build and validate it in these
 increments; hardware and protocol claims require their own integration tests.
 
 Pending tasks and acceptance gates are tracked in [TASKS.md](TASKS.md).
@@ -62,7 +63,8 @@ two MAX98357 modules; later WROVER-IE/N16R8 and TAS5805M (exact variants pending
   consumer signals producer backpressure below a separate low watermark.
 - Nodes declare input/output formats during initialization. Configure validates
   each boundary; init failures unwind initialized nodes and sink resources.
-  Configure failure leaves INITIALIZED, suitable for a clean retry.
+  Configure failure leaves INITIALIZED after successful cleanup; failed cleanup
+  leaves RECOVERY with references retained until cleanup succeeds.
 - Configure/reset/deinit require both audio and producer callers to be quiescent.
   A single audio thread owns processing, DSP state and lifecycle transitions.
   The player accepts STOP, SEEK and master GAIN through a fixed 16-command SPSC
@@ -95,3 +97,14 @@ ALSA close consumes its handle even when reporting an error, so cleanup clears t
 handle while reporting the error; a subsequent deinit can complete graph release.
 Host fault tests and the Zephyr mock exercise retry paths without claiming radio,
 DMA or speaker-time validation.
+
+## T01 architecture reconciliation
+
+Architecture v0.5 is the current contract, with v0.4 retained as historical product
+scope. The canonical finite-source example is compiled and run by `arch_example`.
+Native output is selected through a common facade plus a CMake-selected ALSA/null
+backend; native CLI feature branches and the public EAF_HAVE_ALSA define are gone.
+Source guards now include public headers and native adapter/player translation
+units. POSIX command-line bootstrap is an explicit harness exception. Compile and
+test both backend configurations; third-party allocation, board deadlines and
+physical presentation remain separate acceptance gates.

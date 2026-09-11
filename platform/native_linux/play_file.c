@@ -1,12 +1,9 @@
+#include "native_output.h"
 #include <eaf/eaf_file.h>
 #include <eaf/eaf_player.h>
 #include <eaf/eaf_sink_null.h>
 #include <eaf/eaf_wav.h>
 #include <stdio.h>
-#ifdef EAF_HAVE_ALSA
-#include <eaf/eaf_sink_alsa.h>
-static eaf_alsa_sink_ctx_t alsa;
-#endif
 static eaf_file_t file;
 static eaf_wav_t wav;
 static eaf_source_t source;
@@ -24,14 +21,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Usage: %s file.wav [ALSA_DEVICE] (default: timed null)\n", argv[0]);
         return 2;
     }
-    if (argc == 3) {
-#ifdef EAF_HAVE_ALSA
-        alsa.device = argv[2];
-        sink = (eaf_sink_t){&eaf_alsa_sink_ops, &alsa};
-#else
-        fprintf(stderr, "ALSA support was not built\n");
+    if (eaf_native_output_select(&sink, argc == 3 ? argv[2] : NULL)) {
+        fprintf(stderr, "Requested output is unavailable in this build\n");
         return 2;
-#endif
     }
     eaf_reader_t reader;
     eaf_pipeline_config_t config = {&reservoir, nodes, 1, &sink};

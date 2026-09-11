@@ -1,7 +1,8 @@
 # Embedded Audio Framework (EAF) — Architecture Specification v0.4
 
 > This v0.4 document is the design baseline, not an implementation-completeness
-> claim. Current API/semantic corrections are recorded in PLAN.md; the audit and
+> claim. [Architecture v0.5](docs/architecture-v0.5.md) supersedes its API and
+> conflicting contracts; PLAN.md records decisions. The audit and
 > remaining work are in docs/audit.md and TASKS.md. Example snippets below are
 > historical and must not be copied as current APIs.
 

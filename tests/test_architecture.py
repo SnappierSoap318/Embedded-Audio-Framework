@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parent.parent
-for directory in ('core', 'apps'):
+for directory in ('core', 'apps', 'include', 'platform/native_linux'):
     for path in sorted((root / directory).rglob('*')):
         if path.suffix not in ('.c', '.h'):
             continue
@@ -15,9 +15,12 @@ for directory in ('core', 'apps'):
                 name = include.group(1)
                 forbidden = name.startswith(('zephyr/', 'alsa/', 'freertos/', 'esp_', 'driver/'))
                 forbidden |= name in ('pthread.h', 'semaphore.h', 'sys/socket.h', 'unistd.h')
+                # Native CLI parsing/signals are the explicit host harness exception.
+                if directory == 'platform/native_linux':
+                    forbidden = name.startswith(('zephyr/', 'alsa/', 'freertos/', 'esp_', 'driver/'))
                 assert not forbidden, f'{path}:{line_number}: OS dependency belongs in HAL'
             # Header guards are allowed; executable C must use TU selection for features.
             if path.suffix == '.c':
                 assert not re.match(r'\s*#\s*(if|ifdef|ifndef)\b', line), (
                     f'{path}:{line_number}: conditional compilation in portable C logic')
-print('Portable source architecture guards passed')
+print('Portable API and native adapter architecture guards passed')

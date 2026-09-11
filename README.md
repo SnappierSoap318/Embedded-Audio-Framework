@@ -1,7 +1,8 @@
 # Embedded Audio Framework
 
 Embedded C11 audio framework targeting Zephyr, with Linux as its test harness.
-Architecture: [arch.md](arch.md).
+Current contracts: [architecture v0.5](docs/architecture-v0.5.md);
+historical product direction: [arch.md](arch.md).
 See [PLAN.md](PLAN.md) for implementation stages and resolved API ambiguities.
 See [TASKS.md](TASKS.md) for completion gates and [the audit](docs/audit.md) for
 known design gaps. Planned hardware is described in [hardware roadmap](docs/hardware-roadmap.md).
@@ -10,7 +11,7 @@ Recorded host test results are in [docs/validation.md](docs/validation.md).
 Implemented: bounded SPSC Q1.31 reservoir with recovery hysteresis and fade,
 static pipeline lifecycle with configure rollback, Q2.30 biquads, per-channel
 volume, LR4 stereo-to-2.1 crossover, Linux threads and binary wake semaphore,
-and a sink with aligned ping-pong buffers and absolute wall-clock pacing.
+and a sink with aligned ping-pong buffers and absolute monotonic pacing.
 Playback now includes an asynchronous PCM WAV source, EOF draining, and a bounded
 control queue for stop, seek and gain. See [playback API notes](docs/playback.md).
 

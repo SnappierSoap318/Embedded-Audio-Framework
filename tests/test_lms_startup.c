@@ -82,6 +82,10 @@ int main(void) {
             hal_sleep_ms(1);
         }
         CHECK(!hal_atomic_get(&failed));
+        CHECK(!pause_output(NULL, true));
+        CHECK(hal_atomic_get(&pause_ack));
+        CHECK(!pause_output(NULL, false));
+        CHECK(!hal_atomic_get(&pause_ack));
         atomic_store(&heap_guard, false); /* Teardown is outside the processing guard. */
         if (track == 0) {
             reject_join = true;

@@ -21,10 +21,12 @@ There is no fixed finish date until these scopes and hardware gates are validate
 
 ## Architecture and ownership — P0 before board integration
 
-- [ ] **T01 — Reconcile architecture v0.5.** Fold PLAN decisions into current APIs,
+- [x] **T01 — Reconcile architecture v0.5.** Fold PLAN decisions into current APIs,
   fixed-pool exception, heap scope, EOF/hysteresis semantics and source ownership.
   Replace platform feature branches with CMake-selected adapters. Accept when
   examples compile and architecture tests catch forbidden dependencies.
+  Completed: docs/architecture-v0.5.md, compiled finite-source example, CMake-selected
+  native ALSA/null adapters and expanded portable/public-header/native source guards.
 - [x] **T02 — Pre-create LMS audio worker.** Gate the worker before START; unwind
   creation/start errors without live allocations or writes after reset. Verify
   allocation interception during startup-to-first-block and repeated track changes.

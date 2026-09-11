@@ -205,3 +205,18 @@ successful runs. Reproduce the Clang builds by adding
 
 No hardware, Zephyr, real DAC, network protocol, drift synchronization,
 hard-real-time deadline or long-duration audio-quality validation was performed.
+
+## T03 / T01 validation — 2026-09-11
+
+- ALSA + OI SBC Clang ASan/UBSan: 19/19 CTests, with UBSan halt-on-error.
+- Explicit ALSA-disabled Clang build: 15/15 CTests (OI SBC not configured).
+- Separate Clang TSan: actual native LMS startup, rate changes and pause/resume
+  regression passes, including injected thread/START/STOP failures.
+- Zephyr 4.3.0 native_sim with LMS/SBC/A2DP mock configuration: smoke PASS after
+  repeated failed I2S writes, hardware START and DROP, plus EOS drain error/success.
+- clang-format, clang-tidy and clangd: ALSA host 38 translation units; Zephyr 22.
+  Both backend sources are checked using their selected build configurations.
+
+These results do not validate physical ESP32 output, Bluetooth radio, hardware
+presentation latency, or a complete LMS playback session. The real server and
+speakers were not disturbed during these regressions.
