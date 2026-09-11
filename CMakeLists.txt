@@ -83,6 +83,8 @@ if(BUILD_TESTING)
   set_tests_properties(native_demo PROPERTIES TIMEOUT 10)
   find_package(Python3 COMPONENTS Interpreter QUIET)
   if(Python3_Interpreter_FOUND)
+    add_test(NAME architecture COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_architecture.py)
     if(TARGET test_alsa)
       add_test(NAME alsa_capture COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_alsa.py $<TARGET_FILE:test_alsa> $<TARGET_FILE:eaf_play>)

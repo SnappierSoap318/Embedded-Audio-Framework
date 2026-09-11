@@ -51,6 +51,10 @@ def case(width, big, failure=None, autostart=1):
                         # A zero sequence reproduces the formerly silent right channel.
                         gain += struct.pack(">I", 0 if index == 0 else 0xdeadbeef)
                     send_packet(peer, gain)
+                # Literal reference vector: L=0.25, R=0.5, sequence=0.
+                # opcode | legacy L/R | adjust/preamp | L/R 16.16 | sequence
+                send_packet(peer, bytes.fromhex(
+                    "61756467 00000000 00000000 0100 00004000 00008000 00000000"))
                 request = b"GET /stream.pcm HTTP/1.0\r\nHost: localhost\r\n\r\n"
                 start = bytearray(28)
                 start[:4] = b"strm"; start[4:11] = bytes([ord('s'), ord('0') + autostart, ord('p'),

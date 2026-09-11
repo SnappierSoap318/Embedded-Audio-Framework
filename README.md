@@ -3,6 +3,8 @@
 Embedded C11 audio framework targeting Zephyr, with Linux as its test harness.
 Architecture: [arch.md](arch.md).
 See [PLAN.md](PLAN.md) for implementation stages and resolved API ambiguities.
+See [TASKS.md](TASKS.md) for completion gates and [the audit](docs/audit.md) for
+known design gaps. Planned hardware is described in [hardware roadmap](docs/hardware-roadmap.md).
 Recorded host test results are in [docs/validation.md](docs/validation.md).
 
 Implemented: bounded SPSC Q1.31 reservoir with recovery hysteresis and fade,

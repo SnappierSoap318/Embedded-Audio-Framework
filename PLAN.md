@@ -3,6 +3,11 @@
 The v0.4 architecture is the product direction. Build and validate it in these
 increments; hardware and protocol claims require their own integration tests.
 
+Pending tasks and acceptance gates are tracked in [TASKS.md](TASKS.md).
+The repository audit is [docs/audit.md](docs/audit.md); board sequencing is in
+[docs/hardware-roadmap.md](docs/hardware-roadmap.md). First hardware: WROOM with
+two MAX98357 modules; later WROVER-IE/N16R8 and TAS5805M (exact variants pending).
+
 ## Current priority: embedded player, with Linux as a test harness
 
 1. **Zephyr target path (started):** module/Kconfig build, bounded static thread

@@ -1,5 +1,10 @@
 # Embedded Audio Framework (EAF) — Architecture Specification v0.4
 
+> This v0.4 document is the design baseline, not an implementation-completeness
+> claim. Current API/semantic corrections are recorded in PLAN.md; the audit and
+> remaining work are in docs/audit.md and TASKS.md. Example snippets below are
+> historical and must not be copied as current APIs.
+
 Target Platforms: **Zephyr RTOS** (ESP32, nRF5340, STM32) and **Standalone Linux** (x86_64 / aarch64, pthreads, ALSA).
 Primary Objective: Provide a deterministic, lock-free, zero-heap (post-init) embedded audio pipeline capable of running networked audio players (e.g., Logitech Media Server / Squeezelite multi-room streaming, Bluetooth A2DP, Dante/AES67) with sub-millisecond multi-room synchronization, low-latency DSP (EQ, 2.1 crossover, volume), and platform-agnostic portability.
 

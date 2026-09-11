@@ -46,3 +46,9 @@ rounding in the DSP reference test. Other configured warnings remain errors.
 
 C sources, headers and fixture includes use clang-format. It does not format
 Python, Markdown, Kconfig or CMake files. Those retain their native syntax.
+
+For future work, choose a task/acceptance gate from `TASKS.md`, consult the audit,
+and add an independent failing regression before correcting behavior. CTest's
+`architecture` case guards portable source boundaries. Hardware results must be
+recorded separately from simulator/host passes. See `docs/audit.md` for the
+squeezelite-esp32 reference-test methodology.

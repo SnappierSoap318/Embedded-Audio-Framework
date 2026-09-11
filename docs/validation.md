@@ -1,5 +1,16 @@
 # Native validation
 
+## Repository architecture audit
+
+Reviewed at baseline 7114eb3 after user confirmation of stereo playback. Reproduced
+graph metadata-contract failure and a finite-input DSP NaN-to-int conversion under
+UBSan; fixed both and added fault-node/extreme-parameter regressions. Added EOS
+preservation coverage, a literal independent audg wire vector and a portable-source
+architecture CTest guard. Full ASan/UBSan suite: 15/15 passed. Clang host/Zephyr
+checks and native_sim smoke pass. Findings, limitations and pending tasks are in
+`docs/audit.md` and `TASKS.md`; no ESP32 hardware result is claimed by this audit.
+
+
 ## LMS stereo volume wire-layout correction
 
 Corrected audg gains to byte offsets 14 and 18 (previously 18 and 22). The old

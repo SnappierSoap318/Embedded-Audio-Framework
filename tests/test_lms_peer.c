@@ -11,12 +11,10 @@ static bool ended;
 static unsigned volumes;
 static int set_volume(void *ctx, int32_t left, int32_t right) {
     (void)ctx;
-    static const int32_t expected[5][2] = {{INT32_MAX, INT32_MAX},
-                                           {1073741824, 0},
-                                           {INT32_MAX, 32768},
-                                           {INT32_MAX, INT32_MAX},
-                                           {536870912, 1073741824}};
-    CHECK(volumes < 5);
+    static const int32_t expected[6][2] = {{INT32_MAX, INT32_MAX},  {1073741824, 0},
+                                           {INT32_MAX, 32768},      {INT32_MAX, INT32_MAX},
+                                           {536870912, 1073741824}, {536870912, 1073741824}};
+    CHECK(volumes < 6);
     CHECK(left == expected[volumes][0] && right == expected[volumes][1]);
     ++volumes;
     return 0;
@@ -89,7 +87,7 @@ int main(int argc, char **argv) {
         CHECK(rc != 0 && !ended);
     else
         CHECK(!rc && ended && count == 1025 && starts == 1 && pauses == 1 && resumes == 1 &&
-              volumes == 5);
+              volumes == 6);
     eaf_lms_client_close(&client);
     CHECK(stops == starts);
     puts("LMS peer PASS");
