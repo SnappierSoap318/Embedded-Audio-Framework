@@ -21,7 +21,8 @@ two MAX98357 modules; later WROVER-IE/N16R8 and TAS5805M (exact variants pending
    Autostart/cont gates and an output-snapshot status API are now implemented.
    Immediate pause/resume and a native output-owner harness now work against
    Lyrion 9.1.1 with raw PCM and null output. Next: embedded owner integration,
-   track completion, automatic reconnect and FLAC. ALSA output and LMS
+   track completion, automatic reconnect and FLAC. T02 startup ownership is fixed:
+   the native audio worker is created and gated before pipeline START. ALSA output and LMS
    stereo volume/mute now work in the Linux harness.
 3. **Bluetooth endpoint (started):** bounded SBC packet ingress and decode worker
    with discontinuity resets, CRC rejection and partial reservoir writes. Optional

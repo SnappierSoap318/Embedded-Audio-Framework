@@ -47,7 +47,7 @@ static void apply_volume(void) {
     volume.gain[1] = (int32_t)right;
 }
 static eaf_thread_t audio;
-static eaf_atomic_u32_t quit, elapsed, played, failed, pause_request, pause_ack, done;
+static eaf_atomic_u32_t quit, elapsed, played, failed, pause_request, pause_ack, done, run_gate;
 static bool active;
 static eaf_lms_packet_fn dispatch;
 static int trace(void *ctx, const uint8_t *p, size_t n) {
@@ -65,6 +65,9 @@ static void on_signal(int sig) {
 }
 static void consume(void *ctx) {
     (void)ctx;
+    /* No graph access until START has reset the reservoir and enabled output. */
+    while (!hal_atomic_get(&run_gate) && !hal_atomic_get(&quit))
+        hal_sleep_ms(1);
     while (!hal_atomic_get(&quit)) {
         if (hal_atomic_get(&pause_request)) {
             uint64_t before = hal_monotonic_time_us();
@@ -126,28 +129,38 @@ static void stop(void *ctx) {
     if (!active)
         return;
     hal_atomic_set(&quit, 1);
-    (void)hal_thread_join(&audio);
-    (void)eaf_pipeline_stop(&pipeline);
+    if (audio.impl && hal_thread_join(&audio)) {
+        hal_atomic_set(&failed, 1);
+        return; /* Retain resources until quiescence can be established. */
+    }
+    if (pipeline.state == EAF_RUNNING && eaf_pipeline_stop(&pipeline)) {
+        hal_atomic_set(&failed, 1);
+        return;
+    }
     printf("Stopped: source frames=%llu, underruns=%u\n", (unsigned long long)reservoir.frames_read,
            reservoir.underruns);
-    (void)eaf_pipeline_deinit(&pipeline);
+    if (eaf_pipeline_deinit(&pipeline)) {
+        hal_atomic_set(&failed, 1);
+        return;
+    }
     active = false;
 }
 static int start(void *ctx, const eaf_format_t *fmt) {
     (void)ctx;
+    if (active || audio.impl || pipeline.state != EAF_UNINITIALIZED)
+        return EAF_STATE;
     eaf_pipeline_config_t config = {&reservoir, nodes, 1, &sink};
     int rc = eaf_reservoir_init(&reservoir, storage, CAPACITY, *fmt, 4096);
     if (!rc)
         rc = eaf_pipeline_init(&pipeline, &config);
     if (!rc)
         rc = eaf_pipeline_configure(&pipeline, 128);
-    if (!rc)
-        rc = eaf_pipeline_start(&pipeline);
     if (rc) {
         (void)eaf_pipeline_deinit(&pipeline);
         return rc;
     }
     hal_atomic_set(&quit, 0);
+    hal_atomic_set(&run_gate, 0);
     hal_atomic_set(&elapsed, 0);
     hal_atomic_set(&played, 0);
     hal_atomic_set(&failed, 0);
@@ -156,11 +169,16 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     hal_atomic_set(&done, 0);
     rc = hal_thread_create(&audio, consume, NULL);
     if (rc) {
-        (void)eaf_pipeline_stop(&pipeline);
         (void)eaf_pipeline_deinit(&pipeline);
         return rc;
     }
     active = true;
+    rc = eaf_pipeline_start(&pipeline);
+    if (rc) {
+        stop(NULL); /* quit releases a still-gated worker; no PCM can be processed. */
+        return rc;
+    }
+    hal_atomic_set(&run_gate, 1);
     printf("Stream: %u Hz, %u channels\n", fmt->sample_rate, (unsigned)fmt->num_channels);
     return 0;
 }
@@ -229,6 +247,8 @@ int main(int argc, char **argv) {
         hal_sleep_ms(1);
     }
     eaf_lms_client_close(&client);
+    if (!rc && hal_atomic_get(&failed))
+        rc = EAF_IO;
     if (rc)
         fprintf(stderr, "LMS error: %d\n", rc);
     return rc ? 1 : 0;

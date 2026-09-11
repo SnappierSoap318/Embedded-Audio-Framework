@@ -25,12 +25,16 @@ There is no fixed finish date until these scopes and hardware gates are validate
   fixed-pool exception, heap scope, EOF/hysteresis semantics and source ownership.
   Replace platform feature branches with CMake-selected adapters. Accept when
   examples compile and architecture tests catch forbidden dependencies.
-- [ ] **T02 — Pre-create LMS audio worker.** Gate the worker before START; unwind
+- [x] **T02 — Pre-create LMS audio worker.** Gate the worker before START; unwind
   creation/start errors without live allocations or writes after reset. Verify
   allocation interception during startup-to-first-block and repeated track changes.
+  Completed: real native callbacks tested with thread-create/START failure injection,
+  eight rate-changing restarts, direct heap-call guards and a clean TSan run.
 - [ ] **T03 — Unify sink error/drain lifecycle.** Propagate stop/deinit failures,
   retain resources safely, define bounded output drain vs drop, and avoid freeing
   thread handles until output is quiescent. Inject write/START/DROP/drain failures.
+  Native LMS now retains state and reports join/stop failures; generic sink deinit
+  error propagation and hardware partial-START/drain recovery remain open.
 - [ ] **T04 — Complete HAL scheduling contract.** Monotonic waits, distinct decoder
   and audio priorities, optional affinity, bounded wakeups. Verify timeout behavior,
   semaphore races and contention; measure scheduling margin on ESP32.

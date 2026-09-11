@@ -1,5 +1,22 @@
 # Native validation
 
+## P0: native LMS startup ownership
+
+The test includes the production native LMS callbacks and wraps thread creation
+and direct allocation calls. It failed against START-before-create ordering.
+The corrected worker is created before START, waits on a release/acquire gate,
+and cannot process the graph before reservoir reset/output start completes.
+Tests cover creation failure, START failure, eight rate-changing restarts, and
+retained resources after injected join/stop failures. No direct malloc/calloc/
+realloc/free is permitted from successful START through the first committed block;
+teardown and shared-library internal allocations are outside this guard.
+
+The full 16-test ASan/UBSan suite passed; expanded startup cleanup cases also passed
+in a focused rerun. The startup test passed separately under ThreadSanitizer with
+ALSA disabled. Clang checks pass. This closes T02, not the generic sink lifecycle
+or whole-process post-START heap guarantee (T03/T01).
+
+
 ## Repository architecture audit
 
 Reviewed at baseline 7114eb3 after user confirmation of stereo playback. Reproduced

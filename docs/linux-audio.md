@@ -48,3 +48,9 @@ drained the system default device successfully. Listening quality and audible
 routing were not assessed. The simulated LMS peer checks volume/mute conversion.
 
 API reference: [ALSA PCM documentation](https://www.alsa-project.org/alsa-doc/alsa-lib/pcm.html).
+
+The native LMS worker is created before pipeline START and released only after
+START succeeds. Failed startup cancels and joins the gated worker. Join/stop
+failures retain active state and reject replacement startup instead of resetting
+resources whose ownership is unresolved. The CLI reports cleanup failure; generic
+partial hardware START/deinit failure recovery remains part of T03.
