@@ -1,5 +1,6 @@
 #include "check.h"
 #include <eaf/eaf_dsp.h>
+#include <float.h>
 #include <math.h>
 #include <string.h>
 typedef struct {
@@ -23,6 +24,14 @@ static void coefficients(double c[5], double hz, bool high) {
     c[4] = (2.0 - a) / a;
 }
 int main(void) {
+    /* Finite extreme values must normalize before multiplying by 2*pi. */
+    eaf_biquad_coeff_t extreme, normalized;
+    CHECK(eaf_biquad_lowpass(&extreme, DBL_MAX, DBL_MAX / 4.0) == 0);
+    CHECK(eaf_biquad_lowpass(&normalized, 48000, 12000) == 0);
+    CHECK(extreme.b0 == normalized.b0 && extreme.b1 == normalized.b1 &&
+          extreme.b2 == normalized.b2 && extreme.a1 == normalized.a1 &&
+          extreme.a2 == normalized.a2);
+
     CHECK(eaf_q31_multiply(INT32_MIN, INT32_MIN) == INT32_MAX);
     CHECK(eaf_q31_multiply(INT32_MIN, INT32_MAX) == INT32_MIN);
     CHECK(eaf_q31_multiply(INT32_MAX, 0) == 0);

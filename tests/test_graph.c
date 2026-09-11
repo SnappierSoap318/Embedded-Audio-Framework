@@ -24,6 +24,7 @@ void __wrap_free(void *ptr) {
 }
 static unsigned initialized, deinitialized, resets;
 static bool fail_init, fail_process;
+static unsigned corrupt;
 static int node_init(eaf_node_t *n, const eaf_format_t *in, eaf_format_t *out) {
     (void)n;
     ++initialized;
@@ -32,7 +33,25 @@ static int node_init(eaf_node_t *n, const eaf_format_t *in, eaf_format_t *out) {
 }
 static int node_process(eaf_node_t *n, eaf_buffer_t *b) {
     (void)n;
-    (void)b;
+    switch (corrupt) {
+    case 1:
+        b->samples = NULL;
+        break;
+    case 2:
+        b->capacity_samples = 1;
+        break;
+    case 3:
+        b->frame_count = UINT32_MAX;
+        break;
+    case 4:
+        b->format.num_channels = 0;
+        break;
+    case 5:
+        b->flags = 0;
+        break;
+    default:
+        break;
+    }
     return fail_process ? EAF_IO : EAF_OK;
 }
 static int node_reset(eaf_node_t *n) {
@@ -80,6 +99,22 @@ int main(void) {
         CHECK(sink_ctx.samples[1][i] == 0);
     CHECK(!sink_ctx.acquired);
     fail_process = false;
+    for (corrupt = 1; corrupt <= 4; ++corrupt) {
+        unsigned slot = sink_ctx.active;
+        CHECK(eaf_pipeline_process(&p) == EAF_INVALID);
+        CHECK(!sink_ctx.acquired);
+        CHECK(sink_ctx.buffers[slot].samples == sink_ctx.samples[slot]);
+        CHECK(sink_ctx.buffers[slot].capacity_samples ==
+              (size_t)EAF_NULL_MAX_FRAMES * EAF_MAX_CHANNELS);
+        for (size_t i = 0; i < 32; ++i)
+            CHECK(sink_ctx.samples[slot][i] == 0);
+    }
+    corrupt = 5;
+    eaf_reservoir_finish(&r);
+    unsigned eos_slot = sink_ctx.active;
+    CHECK(eaf_pipeline_process(&p) == EAF_EOF);
+    CHECK(sink_ctx.buffers[eos_slot].flags & EAF_FRAME_EOS);
+    corrupt = 0;
     CHECK(eaf_pipeline_stop(&p) == 0 && resets == 1);
     forbid_heap = false;
     CHECK(eaf_pipeline_process(&p) == EAF_STATE);

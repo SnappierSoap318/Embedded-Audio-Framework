@@ -95,21 +95,36 @@ int eaf_pipeline_process(eaf_pipeline_t *p) {
     if (!buf || !buf->samples || buf->capacity_frames < p->block_frames ||
         buf->capacity_samples / p->output_format.num_channels < p->block_frames)
         return EAF_INVALID;
+    eaf_buffer_t owned = *buf;
     buf->frame_count = p->block_frames;
     rc = eaf_reservoir_pull(p->config.reservoir, buf);
     bool eos = !rc && (buf->flags & EAF_FRAME_EOS) != 0;
-    for (size_t i = 0; !rc && i < p->config.node_count; ++i)
+    for (size_t i = 0; !rc && i < p->config.node_count; ++i) {
+        uint8_t channels = buf->format.num_channels;
         rc = p->config.nodes[i]->ops->process(p->config.nodes[i], buf);
+        /* Nodes may change samples and expand format, never replace storage.
+           Validate before another node can consume corrupted metadata. */
+        if (buf->samples != owned.samples || buf->capacity_samples != owned.capacity_samples ||
+            buf->capacity_frames != owned.capacity_frames || buf->frame_count != p->block_frames ||
+            !eaf_format_valid(&buf->format) ||
+            buf->format.sample_rate != p->output_format.sample_rate ||
+            buf->format.num_channels < channels ||
+            buf->format.num_channels > p->output_format.num_channels)
+            rc = EAF_INVALID;
+    }
     if (!rc &&
         (!eaf_format_equal(&buf->format, &p->output_format) || buf->frame_count != p->block_frames))
         rc = EAF_INVALID;
     if (rc) {
+        *buf = owned; /* Recover only through the sink-owned storage. */
         buf->format = p->output_format;
         buf->frame_count = p->block_frames;
         memset(buf->samples, 0,
                (size_t)p->block_frames * p->output_format.num_channels * sizeof(int32_t));
         buf->flags = EAF_FRAME_SILENCE;
     }
+    if (!rc && eos)
+        buf->flags |= EAF_FRAME_EOS;
     int commit = sink->ops->commit_buf(sink, buf);
     if (!rc && !commit && eos) {
         p->completed = true;

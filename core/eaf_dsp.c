@@ -28,14 +28,14 @@ int32_t eaf_biquad_tick(const eaf_biquad_coeff_t *c, eaf_biquad_state_t *s, int3
 static int design(eaf_biquad_coeff_t *c, double rate, double hz, bool high) {
     if (!c || !isfinite(rate) || !isfinite(hz) || rate <= 0.0 || hz <= 0.0 || hz >= rate / 2.0)
         return EAF_INVALID;
-    double w = 6.2831853071795864769 * hz / rate;
+    double w = 6.2831853071795864769 * (hz / rate);
     double cs = cos(w), alpha = sin(w) / sqrt(2.0), a0 = 1.0 + alpha;
     double b0 = (high ? 1.0 + cs : 1.0 - cs) / (2.0 * a0);
     double values[5] = {b0, (high ? -2.0 : 2.0) * b0, b0, -2.0 * cs / a0, (1.0 - alpha) / a0};
     int32_t q[5];
     for (size_t i = 0; i < 5; ++i) {
         double scaled = round(values[i] * 1073741824.0);
-        if (scaled < (double)INT32_MIN || scaled > (double)INT32_MAX)
+        if (!isfinite(scaled) || scaled < (double)INT32_MIN || scaled > (double)INT32_MAX)
             return EAF_INVALID;
         q[i] = (int32_t)scaled;
     }
