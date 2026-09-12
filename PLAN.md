@@ -158,7 +158,9 @@ ignored local credentials, the physical Wi-Fi MAC identity, timed reconnect,
 32 KiB stereo reservoir and selectable I2S/timed-null output. The I2S adapter
 supports acknowledged pause/drain/resume; mono expands to stereo and LMS gain
 follows fixed −18 dB bench attenuation. Host regression exercises lifecycle,
-rate changes, volume and pause; physical association/playback remains pending.
+rate changes, volume and pause. Physical Wi-Fi/DHCP and LMS registration passed
+on 2026-09-12; playback remains pending. See the
+[connection evidence](docs/bench/wroom-lms-2026-09-12.md).
 The network stack's 64 KiB heap is an explicit platform allocation exception;
 static image fit is not runtime memory/timing qualification. See the
 [app guide](platform/esp32_lms/README.md) for build and bench steps.

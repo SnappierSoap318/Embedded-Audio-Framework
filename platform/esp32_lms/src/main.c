@@ -19,12 +19,15 @@ static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event,
                        struct net_if *event_iface) {
     if (event_iface != iface)
         return;
-    if (event == NET_EVENT_WIFI_DISCONNECT_RESULT)
+    if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
         atomic_store(&associated, false);
+        printk("Wi-Fi disconnected\n");
+    }
     if (event == NET_EVENT_WIFI_CONNECT_RESULT && cb->info &&
         cb->info_length >= sizeof(struct wifi_status)) {
         const struct wifi_status *status = cb->info;
         atomic_store(&associated, status->status == 0);
+        printk("Wi-Fi association result: %d\n", status->status);
     }
 }
 static bool online(void) {
@@ -40,8 +43,11 @@ static int connect_wifi(void) {
     int64_t deadline = k_uptime_get() + 30000;
     while (!online() && k_uptime_get() < deadline)
         k_sleep(K_MSEC(100));
-    if (!online())
+    if (!online()) {
+        printk("Wi-Fi timeout: associated=%u, IPv4=%u\n", atomic_load(&associated) ? 1u : 0u,
+               net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED) ? 1u : 0u);
         return EAF_TIMEOUT;
+    }
     char address[NET_IPV4_ADDR_LEN];
     struct in_addr *ip = net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
     if (!ip)

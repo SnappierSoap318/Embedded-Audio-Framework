@@ -42,7 +42,9 @@ cmake --build build-wroom-lms
 
 For a **silent connectivity test**, use a separate `build-wroom-lms-null`
 directory and add `-DEXTRA_CONF_FILE=null.conf`. This replaces audio output with
-a timed null sink. Neither image has been physically qualified yet.
+a timed null sink. The I2S image has passed physical Wi-Fi/DHCP and LMS registration;
+audible output and the null image remain unqualified. See
+[bench evidence](../../docs/bench/wroom-lms-2026-09-12.md).
 
 ## Board verification when wiring is ready
 
