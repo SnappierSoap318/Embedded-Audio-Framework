@@ -139,3 +139,14 @@ Host regression covers coalescing, interrupted timeout, 5,000 semaphore handshak
 actual allowed-CPU pinning and denied FIFO creation with both role priorities.
 Zephyr smoke checks role priorities, pool reuse, timeout and optional affinity.
 Hardware measurements under radio contention are required before closing T04.
+
+## First physical WROOM boot
+
+On 2026-09-12, the UART-only internal-RAM application in `platform/esp32_boot`
+was built with Zephyr SDK 0.17.4, flashed and verified on ESP32-D0WD-V3 revision
+3.1 with 4 MB flash. PSRAM, I2S and radios are disabled. The gated producer and
+null-output graph processed 4096 frames with zero underruns, then printed four
+PASS heartbeats over an 18-second reset/boot capture. See
+[bench evidence](docs/bench/wroom-boot-2026-09-12.md) for toolchain pins, memory,
+image hash and local backup paths. Physical DAC wiring and radio memory/timing
+qualification remain separate next steps; this does not close T04/T05/T06.

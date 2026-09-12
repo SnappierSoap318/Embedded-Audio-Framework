@@ -237,3 +237,12 @@ FIFO attributes and denied creation are tested without requiring privileged RT
 execution. Native affinity-enabled smoke uses only CPU 0; ESP32 SMP placement,
 radio contention and wake/compute timing have not been measured. T04 remains open
 for those physical scheduling acceptance results.
+
+## First physical ESP32 test — 2026-09-12
+
+[WROOM boot evidence](bench/wroom-boot-2026-09-12.md): esptool write/hash verification,
+reset and 18-second UART capture passed. Internal-RAM/null-output processing:
+4096 source frames, zero underruns, four PASS heartbeats. Same app passes native_sim
+and 11-unit native clang-format/clang-tidy/clangd checks; real Xtensa build passes.
+PSRAM, DAC/I2S and radios were disabled. No physical-audio or radio-load timing
+claim is made by this boot test.

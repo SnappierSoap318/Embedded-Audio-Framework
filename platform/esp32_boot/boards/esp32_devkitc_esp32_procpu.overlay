@@ -1,0 +1,4 @@
+/* UART-only bring-up: never enable I2S or amplifier GPIOs here. */
+&psram0 {
+    status = "disabled";
+};

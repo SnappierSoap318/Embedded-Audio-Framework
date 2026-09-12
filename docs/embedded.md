@@ -3,6 +3,14 @@
 Zephyr, LMS and Bluetooth are the primary delivery path. Linux runs portable
 algorithm/protocol tests and optional listening tools.
 
+## First physical WROOM boot
+
+Use [platform/esp32_boot](../platform/esp32_boot/README.md) for the UART-only
+internal-RAM test before wiring DACs. It explicitly disables PSRAM, I2S and radio
+stacks. The pinned DevKitC template is used only for the common ESP32 boot/UART
+setup; confirm the carrier and amplifier markings before assigning I2S GPIOs.
+The first board boot passed; see [physical evidence](bench/wroom-boot-2026-09-12.md).
+
 ## Implemented and tested
 
 - Zephyr module/Kconfig integration and a pinned `west.yml` (Zephyr v4.3.0).

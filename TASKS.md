@@ -52,6 +52,10 @@ There is no fixed finish date until these scopes and hardware gates are validate
 - [ ] **T05 — Reproducible real-board build.** Confirm module/board target and
   MAX98357A/B; pin SDK/toolchain/modules, add board app, overlay and documented
   GPIO mapping. Build/flash from a clean workspace and save boot log/link map.
+  Physical UART-only boot PASS: ESP32-D0WD-V3 rev 3.1, 4 MB flash, PSRAM disabled;
+  4096 source frames and zero underruns. Build pins and boot/link evidence are in
+  docs/bench/wroom-boot-2026-09-12.md. DAC wiring and carrier markings remain to
+  be confirmed before completing the board/pin configuration.
 - [ ] **T06 — Memory budget and I2S-only stereo.** Start without Wi-Fi/BT. Size
   reservoir for actual internal RAM; keep DMA slab internal. Play left-only,
   right-only, silence and low-level test tones at 44.1/48 kHz, 32-bit slots.

@@ -1,0 +1,16 @@
+sample:
+  name: EAF internal-RAM UART boot test
+common:
+  tags: audio
+  harness: console
+  harness_config:
+    type: one_line
+    regex:
+      - "EAF boot PASS.*source=4096 frames, underruns=0"
+tests:
+  eaf.boot:
+    platform_allow:
+      - native_sim/native/64
+      - esp32_devkitc/esp32/procpu
+    integration_platforms:
+      - native_sim/native/64
