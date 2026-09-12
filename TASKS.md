@@ -68,6 +68,9 @@ There is no fixed finish date until these scopes and hardware gates are validate
   see its README for credentials and build steps. Physical Wi-Fi/DHCP and LMS
   registration passed (see `docs/bench/wroom-lms-2026-09-12.md`); server playback,
   runtime memory and recovery checks remain pending.
+  Wireless application logs are available on port 80. Qualify the enlarged RX
+  pool/window with standalone playback beyond several track lengths, including
+  browser polling; retain underrun counts and stalled/recovered request results.
 - [ ] **T08 — Complete Bluetooth board app.** Add controller enable, SDP record,
   pairing/discoverability and bounded notification handoff. Coordinate queue purge,
   decoder reset and source arbitration across start/suspend/release/disconnect.

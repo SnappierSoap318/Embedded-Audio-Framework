@@ -1,3 +1,4 @@
+#include "diagnostics.h"
 #include "output.h"
 #include <string.h>
 #include <zephyr/kernel.h>
@@ -21,13 +22,13 @@ static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event,
         return;
     if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
         atomic_store(&associated, false);
-        printk("Wi-Fi disconnected\n");
+        board_log("Wi-Fi disconnected");
     }
     if (event == NET_EVENT_WIFI_CONNECT_RESULT && cb->info &&
         cb->info_length >= sizeof(struct wifi_status)) {
         const struct wifi_status *status = cb->info;
         atomic_store(&associated, status->status == 0);
-        printk("Wi-Fi association result: %d\n", status->status);
+        board_log("Wi-Fi association result: %d", status->status);
     }
 }
 static bool online(void) {
@@ -44,27 +45,28 @@ static int connect_wifi(void) {
     while (!online() && k_uptime_get() < deadline)
         k_sleep(K_MSEC(100));
     if (!online()) {
-        printk("Wi-Fi timeout: associated=%u, IPv4=%u\n", atomic_load(&associated) ? 1u : 0u,
-               net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED) ? 1u : 0u);
+        board_log("Wi-Fi timeout: associated=%u, IPv4=%u", atomic_load(&associated) ? 1u : 0u,
+                  net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED) ? 1u : 0u);
         return EAF_TIMEOUT;
     }
     char address[NET_IPV4_ADDR_LEN];
     struct in_addr *ip = net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
     if (!ip)
         return EAF_IO;
-    printk("Wi-Fi IPv4: %s\n", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
+    board_log("Wi-Fi IPv4: %s", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
     return EAF_OK;
 }
 int main(void) {
+    board_diagnostics_start();
     const char *ssid = board_wifi_ssid(), *password = board_wifi_password();
     size_t ssid_length = strlen(ssid), password_length = strlen(password);
     if (!ssid_length || ssid_length > 32 || password_length < 8 || password_length > 63) {
-        printk("Set a 2.4 GHz WPA2 SSID/passphrase in credentials.local.h and rebuild\n");
+        board_log("Set a 2.4 GHz WPA2 SSID/passphrase in credentials.local.h and rebuild");
         return 1;
     }
     iface = net_if_get_first_wifi();
     if (!iface) {
-        printk("No Wi-Fi interface\n");
+        board_log("No Wi-Fi interface");
         return 1;
     }
     struct in_addr server;
@@ -76,7 +78,7 @@ int main(void) {
     uint8_t mac[6];
     memcpy(mac, link->addr, sizeof(mac));
     if (board_output_init()) {
-        printk("Output initialization failed\n");
+        board_log("Output initialization failed");
         return 1;
     }
     eaf_lms_callbacks_t cb = board_output_callbacks();
@@ -94,19 +96,34 @@ int main(void) {
                                                   .band = WIFI_FREQ_BAND_2_4_GHZ,
                                                   .bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ,
                                                   .timeout = 20};
-    printk("EAF LMS board: player %02x:%02x:%02x:%02x:%02x:%02x, server %s:3483\n", mac[0], mac[1],
-           mac[2], mac[3], mac[4], mac[5], CONFIG_EAF_BOARD_SERVER);
+    board_log("EAF LMS board: player %02x:%02x:%02x:%02x:%02x:%02x, server %s:3483", mac[0], mac[1],
+              mac[2], mac[3], mac[4], mac[5], CONFIG_EAF_BOARD_SERVER);
     for (;;) {
         int rc = online() ? EAF_OK : connect_wifi();
-        if (!rc)
+        if (!rc) {
             rc = eaf_lms_client_connect(&client, sys_be32_to_cpu(server.s_addr), 3483, mac);
+            if (rc)
+                board_log("LMS connect failed rc=%d server=%s:3483", rc, CONFIG_EAF_BOARD_SERVER);
+        }
         if (!rc)
-            printk("LMS connected; select this player's MAC in the server UI\n");
-        int64_t report = 0;
+            board_log("LMS connected; select this player's MAC in the server UI");
+        int64_t report = 0, diagnostic = 0;
         while (!rc && online() && !board_output_failed()) {
             rc = eaf_lms_client_step(&client);
+            if (rc)
+                board_log("LMS transport/command failed rc=%d (timed sync unsupported)", rc);
             int64_t now = k_uptime_get();
             eaf_lms_playback_t snapshot;
+            if (now >= diagnostic) {
+                bool active = board_output_snapshot(&snapshot);
+                board_log("LMS rc=%d stream=%u headers=%u received=%llu PCM=%u queued=%u "
+                          "played_ms=%u underruns=%u failed=%u",
+                          rc, client.streaming ? 1u : 0u, client.headers_done ? 1u : 0u,
+                          (unsigned long long)client.bytes_received, client.pcm_count,
+                          active ? snapshot.queued_bytes : 0u, active ? snapshot.elapsed_ms : 0u,
+                          board_output_underruns(), board_output_failed() ? 1u : 0u);
+                diagnostic = now + 5000;
+            }
             if (!rc && !client.wait_cont && !client.wait_start && now >= report &&
                 board_output_snapshot(&snapshot)) {
                 rc = eaf_lms_client_report_playback(&client, &snapshot);
@@ -116,10 +133,10 @@ int main(void) {
         }
         eaf_lms_client_close(&client);
         if (board_output_failed()) {
-            printk("Output failure: playback stopped; inspect serial log and reset\n");
+            board_log("Output failure: playback stopped; inspect serial log and reset");
             return 1;
         }
-        printk("Connection ended (%d); retry in 5 seconds\n", rc);
+        board_log("Connection ended (%d); retry in 5 seconds", rc);
         if (!online()) {
             (void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
             net_dhcpv4_stop(iface);

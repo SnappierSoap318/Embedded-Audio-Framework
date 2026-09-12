@@ -126,3 +126,12 @@ worker. The Xtensa build checks the real ESP32 driver integration with strict GC
 warnings. `build-zephyr-bt-lms` supplies Clang coverage and runtime smoke for the
 I2S HAL. Native `board_output` uses a timed null backend to exercise repeated track
 lifecycle, mono expansion, gain/mute and pause without radio or amplifier hardware.
+
+The current local dependency checkouts and Python/SDK tools live in ignored
+`build-deps/` rather than `/tmp`. See the WROOM app README for updated paths.
+Use a fresh build directory when moving Zephyr's source/toolchain paths; existing
+CMake caches retain absolute paths. Wireless diagnostics were verified with
+`build-wireless-sim` (Clang), `build-wroom-wireless` (I2S) and
+`build-wireless-null` (silent backend). Native `board_log` checks bounded history,
+truncation and concurrent reads/writes; optional Node-backed `web_page` checks
+stalled-fetch recovery using the actual embedded page script.

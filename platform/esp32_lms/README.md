@@ -9,7 +9,8 @@ Bluetooth is disabled for this first network/audio qualification.
 
 Use the SDK and Zephyr/HAL revisions in [the boot app](../esp32_boot/README.md).
 Additionally check out the Zephyr manifest's mbedTLS revision
-`c5b06d89c9c498d8fc8659ce31f7e53137b6270f` at `/tmp/eaf-mbedtls`.
+`c5b06d89c9c498d8fc8659ce31f7e53137b6270f` at `build-deps/mbedtls`. Keep dependencies under the ignored `build-deps/`
+directory so a reboot does not remove the toolchain.
 Install the ESP32 radio libraries declared by the pinned HAL's
 `zephyr/module.yml` using Zephyr's `west blobs fetch hal_espressif` in a configured
 west workspace (or fetch the manifest URLs and verify their declared SHA-256
@@ -29,13 +30,13 @@ setup message. Credentials are compiled into the firmware, so treat the build
 folder and firmware as private too. Reconfigure/rebuild after editing credentials.
 
 ```sh
-export PATH=/tmp/eaf-zephyr-venv/bin:$PATH
-export ZEPHYR_BASE=/tmp/eaf-zephyr
-export ZEPHYR_SDK_INSTALL_DIR=/tmp/zephyr-sdk-0.17.4
+export PATH="$PWD/build-deps/venv/bin:$PATH"
+export ZEPHYR_BASE="$PWD/build-deps/zephyr"
+export ZEPHYR_SDK_INSTALL_DIR="$PWD/build-deps/zephyr-sdk-0.17.4"
 cmake -S platform/esp32_lms -B build-wroom-lms -G Ninja \
   -DBOARD=esp32_devkitc/esp32/procpu -DZEPHYR_TOOLCHAIN_VARIANT=zephyr \
-  -DPython3_EXECUTABLE=/tmp/eaf-zephyr-venv/bin/python \
-  "-DZEPHYR_MODULES=$PWD;/tmp/eaf-hal-espressif;/tmp/eaf-mbedtls" \
+  -DPython3_EXECUTABLE="$PWD/build-deps/venv/bin/python" \
+  "-DZEPHYR_MODULES=$PWD;$PWD/build-deps/hal-espressif;$PWD/build-deps/mbedtls" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build-wroom-lms
 ```
@@ -88,13 +89,46 @@ remain pending. This application does not close T04, T06, T07 or T09 hardware ga
 EAF audio storage and worker pools are static. The Zephyr/Espressif network stack
 uses a separately configured 64 KiB heap: this is an explicit platform exception
 to the audio path's no-allocation contract. Link-time fit does not prove heap or
-stack headroom under network traffic. The initial I2S build reports DRAM0 151496 B
-of 192 KiB, DRAM1 40216 B of 96 KiB, and IRAM 70144 B of 224 KiB; ESP32 region
-accounting is linker-specific, so do not add these as independent free RAM pools.
-The null sink retains diagnostic sample buffers, so its DRAM0 use is higher
-(183784 B of 192 KiB); it is not a smaller-memory alternative. Capture runtime
-allocation failures and stack high-water marks on the board.
+stack headroom under network traffic. The wireless diagnostic I2S build reports DRAM0 160864 B
+of 192 KiB, DRAM1 58968 B of 96 KiB, and IRAM 70144 B of 224 KiB. ESP32
+region accounting is linker-specific; do not sum these as independent RAM pools.
+The null backend is compiled consistently with a 128-frame limit in this app;
+its DRAM0/DRAM1 use is 164480/54872 B. Both variants link without PSRAM. Capture
+runtime allocation failures and stack high-water marks on the board.
 
 Host `board_output` regression covers repeated mono streams, sample-rate changes,
 volume/mute, pause/resume and cancellation. Zephyr smoke checks I2S pause drain
 failure and resumed submission. Native simulation validates software only.
+
+## Wireless application diagnostics
+
+Open `http://<board DHCP address>/` (last observed `http://192.168.8.176/`).
+`/logs` also returns plain text for curl or a collector. The page refreshes every
+2 seconds and aborts stalled fetches after 4 seconds before retrying. It uses no
+external web assets. This is a read-only, unauthenticated LAN bench endpoint,
+not a firmware updater or remote shell; no Wi-Fi credentials are included.
+
+A fixed 24 × 160-byte history retains recent application events, including events
+before Wi-Fi connected. It is lost on reset and older events are overwritten.
+This is not a complete ROM/panic/driver serial capture. UART remains available.
+Log writes do not wait for a busy history lock; dropped entries are counted.
+The HTTP worker runs at priority 7 with bounded socket waits, below audio and LMS.
+
+Every 5 seconds, playback diagnostics report received PCM bytes, queued output
+bytes, submitted source time, underruns and the output-failure flag. A growing
+underrun count indicates the source is not feeding output continuously; a full
+queue alone is normal backpressure. Time counts source frames submitted, not an
+independently measured speaker clock. A reachable page with LMS connection errors
+points to the server/route separately from the amplifier circuit.
+
+The original 32 × 128-byte RX pool implied an approximately 1365-byte default TCP
+window. The bench configuration now allocates 64 × 256-byte RX fragments and an
+explicit 8192-byte receive window. Socket/context budgets also accommodate the
+HTTP listener and a browser client alongside LMS and DHCP. This change needs
+sustained physical playback validation; it is not proof that every stall is fixed.
+
+Use standalone playback for qualification. Timestamped `strmu`/`strmp` commands
+used by synchronized playback currently return EAF_UNSUPPORTED and terminate the
+LMS session. Timed starts, clock correction and proper sync status remain pending.
+The fixed 1/8 gain stage still reduces maximum LMS volume by about 18 dB. Do not
+mistake that deliberate attenuation for evidence of a faulty speaker circuit.

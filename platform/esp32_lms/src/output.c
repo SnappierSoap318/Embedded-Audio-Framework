@@ -1,4 +1,5 @@
 #include "output.h"
+#include "diagnostics.h"
 #include <eaf/eaf_core.h>
 #include <eaf/eaf_dsp.h>
 #include <stdio.h>
@@ -39,6 +40,7 @@ static void apply_volume(void) {
 static eaf_thread_t audio;
 static eaf_atomic_u32_t quit, elapsed, played, failed, pause_request, pause_ack, done, run_gate;
 static bool active;
+static eaf_atomic_u32_t underruns;
 static void consume(void *ctx) {
     (void)ctx;
     /* No graph access until START has reset the reservoir and enabled output. */
@@ -63,9 +65,11 @@ static void consume(void *ctx) {
         apply_volume();
         int rc = eaf_pipeline_process(&pipeline);
         if (rc && rc != EAF_EOF) {
+            board_log("Audio process failed rc=%d state=%d", rc, (int)pipeline.state);
             hal_atomic_set(&failed, 1);
             break;
         }
+        hal_atomic_set(&underruns, reservoir.underruns);
         uint64_t presented = reservoir.frames_read;
         /* Submitted frames, not a speaker presentation timestamp. */
         hal_atomic_set(&elapsed, (uint32_t)(presented * 1000u / reservoir.format.sample_rate));
@@ -101,8 +105,8 @@ static void stop(void *ctx) {
         hal_atomic_set(&failed, 1);
         return;
     }
-    printf("Stopped: source frames=%llu, underruns=%u\n", (unsigned long long)reservoir.frames_read,
-           reservoir.underruns);
+    board_log("Stopped: source frames=%llu, underruns=%u",
+              (unsigned long long)reservoir.frames_read, reservoir.underruns);
     if (eaf_pipeline_deinit(&pipeline)) {
         hal_atomic_set(&failed, 1);
         return;
@@ -115,6 +119,7 @@ static int start(void *ctx, const eaf_format_t *fmt) {
         return EAF_STATE;
     if (!fmt || !eaf_format_valid(fmt) || fmt->num_channels > 2)
         return EAF_UNSUPPORTED;
+    board_log("Output request: %u Hz channels=%u", fmt->sample_rate, (unsigned)fmt->num_channels);
     input_channels = fmt->num_channels;
     eaf_pipeline_config_t config = {&reservoir, nodes, 2, sink};
     int rc = eaf_reservoir_init(&reservoir, storage, CAPACITY,
@@ -124,6 +129,7 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     if (!rc)
         rc = eaf_pipeline_configure(&pipeline, 128);
     if (rc) {
+        board_log("Output setup failed rc=%d", rc);
         int cleanup = eaf_pipeline_deinit(&pipeline);
         if (cleanup) {
             active = true;
@@ -134,6 +140,7 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     hal_atomic_set(&quit, 0);
     hal_atomic_set(&run_gate, 0);
     hal_atomic_set(&elapsed, 0);
+    hal_atomic_set(&underruns, 0);
     hal_atomic_set(&played, 0);
     hal_atomic_set(&failed, 0);
     hal_atomic_set(&pause_request, 0);
@@ -142,6 +149,7 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     const eaf_thread_options_t scheduling = {EAF_THREAD_AUDIO, -1, false};
     rc = hal_thread_create_with_options(&audio, consume, NULL, &scheduling);
     if (rc) {
+        board_log("Output setup failed rc=%d", rc);
         int cleanup = eaf_pipeline_deinit(&pipeline);
         if (cleanup) {
             active = true;
@@ -156,7 +164,7 @@ static int start(void *ctx, const eaf_format_t *fmt) {
         return rc;
     }
     hal_atomic_set(&run_gate, 1);
-    printf("Stream: %u Hz, %u channels\n", fmt->sample_rate, (unsigned)fmt->num_channels);
+    board_log("Stream: %u Hz, %u channels", fmt->sample_rate, (unsigned)fmt->num_channels);
     return 0;
 }
 static uint32_t pcm(void *ctx, const int32_t *samples, uint32_t frames) {
@@ -173,7 +181,7 @@ static uint32_t pcm(void *ctx, const int32_t *samples, uint32_t frames) {
 static void eof(void *ctx) {
     (void)ctx;
     eaf_reservoir_finish(&reservoir);
-    printf("Input EOF\n");
+    board_log("Input EOF");
 }
 
 int board_output_init(void) {
@@ -198,4 +206,8 @@ bool board_output_snapshot(eaf_lms_playback_t *snapshot) {
         (eaf_lms_playback_t){hal_atomic_get(&elapsed), CAPACITY * 8u,
                              eaf_reservoir_level(&reservoir) * 8u, hal_atomic_get(&played) != 0};
     return true;
+}
+
+uint32_t board_output_underruns(void) {
+    return hal_atomic_get(&underruns);
 }

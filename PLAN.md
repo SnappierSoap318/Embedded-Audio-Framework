@@ -164,3 +164,15 @@ on 2026-09-12; playback remains pending. See the
 The network stack's 64 KiB heap is an explicit platform allocation exception;
 static image fit is not runtime memory/timing qualification. See the
 [app guide](platform/esp32_lms/README.md) for build and bench steps.
+
+## Wireless diagnostics and playback starvation investigation
+
+The WROOM app now includes a bounded application-log history and read-only HTTP
+viewer on port 80, with browser timeout/retry regression coverage. Output underruns
+are transferred atomically to the transport-thread status log. Connection logs
+identify LMS connection versus transport/command failure. Network socket budgets,
+receive window and timeout options are explicit in the board app configuration.
+Physical diagnostics previously observed a tiny 272-byte stream and later severely
+slow source progression; neither result establishes an amplifier fault. Sustained
+playback with the revised network budget remains a required gate. Synchronized
+start/pause is unsupported, and the fixed −18 dB bench attenuation remains enabled.
