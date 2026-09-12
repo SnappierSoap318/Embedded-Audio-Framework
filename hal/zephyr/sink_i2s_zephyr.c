@@ -11,7 +11,7 @@ static struct {
     const char *name;
     const struct device *device;
     eaf_buffer_t buffer;
-    bool configured, running, started;
+    bool configured, running, started, paused;
     void *held;
 } state;
 int eaf_zephyr_i2s_bind(const char *name) {
@@ -54,13 +54,14 @@ static int start(eaf_sink_t *sink) {
     if (!state.configured || state.running)
         return EAF_STATE;
     /* Zephyr requires a queued block before the hardware START trigger. */
+    state.paused = false;
     state.running = true;
     state.started = false;
     return EAF_OK;
 }
 static int acquire(eaf_sink_t *sink, eaf_buffer_t **buffer) {
     (void)sink;
-    if (!state.running || state.held || !buffer)
+    if (!state.running || state.paused || state.held || !buffer)
         return EAF_STATE;
     if (k_mem_slab_alloc(&tx_blocks, &state.held, K_MSEC(20)))
         return EAF_IO;
@@ -87,6 +88,19 @@ static int drain(void) {
     if (!rc)
         state.started = false;
     return rc;
+}
+int eaf_zephyr_i2s_pause(bool paused) {
+    if (!state.running || state.held)
+        return EAF_STATE;
+    if (state.paused == paused)
+        return EAF_OK;
+    if (paused && state.started) {
+        int rc = drain();
+        if (rc)
+            return rc;
+    }
+    state.paused = paused;
+    return EAF_OK;
 }
 static int commit(eaf_sink_t *sink, eaf_buffer_t *buffer) {
     (void)sink;

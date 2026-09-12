@@ -167,6 +167,38 @@ int main(void) {
         if (!rc)
             rc = tx->ops->stop(tx);
     }
+    eaf_mock_fail_drain = false;
+    if (!rc)
+        rc = tx->ops->start(tx);
+    if (!rc)
+        rc = eaf_zephyr_i2s_pause(true);
+    eaf_buffer_t *paused_buffer = NULL;
+    if (!rc && tx->ops->acquire_buf(tx, &paused_buffer) != EAF_STATE)
+        rc = EAF_IO;
+    if (!rc)
+        rc = eaf_zephyr_i2s_pause(false);
+    if (!rc)
+        rc = tx->ops->acquire_buf(tx, &paused_buffer);
+    if (!rc) {
+        paused_buffer->flags = 0;
+        rc = tx->ops->commit_buf(tx, paused_buffer);
+    }
+    eaf_mock_fail_drain = true;
+    if (!rc && eaf_zephyr_i2s_pause(true) != EAF_IO)
+        rc = EAF_IO;
+    eaf_mock_fail_drain = false;
+    if (!rc)
+        rc = eaf_zephyr_i2s_pause(true);
+    if (!rc)
+        rc = eaf_zephyr_i2s_pause(false);
+    if (!rc)
+        rc = tx->ops->acquire_buf(tx, &paused_buffer);
+    if (!rc) {
+        paused_buffer->flags = 0;
+        rc = tx->ops->commit_buf(tx, paused_buffer);
+    }
+    if (!rc)
+        rc = tx->ops->stop(tx);
     int cleanup = tx->ops->deinit(tx);
     if (!rc)
         rc = cleanup;

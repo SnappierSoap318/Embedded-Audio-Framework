@@ -5,3 +5,6 @@
 extern eaf_sink_t eaf_zephyr_i2s_sink;
 /* Device name must outlive sink use. Call only before configure, while stopped. */
 int eaf_zephyr_i2s_bind(const char *device_name);
+
+/* Audio-owner only, between blocks. Pause drains queued DMA, preserves PCM. */
+int eaf_zephyr_i2s_pause(bool paused);
