@@ -29,7 +29,15 @@ speakers. The ESP32 can remain USB-powered: join supply negative, ESP32 GND and
 both amplifier GND pins, and connect supply positive only to amplifier VIN pins.
 Do not connect external 5 V to the USB-powered carrier VIN without confirming its
 power circuit. Do not power the amplifiers from the carrier's 3V3 regulator.
-Speaker impedance/wattage and available supply are still awaiting user confirmation.
+The user can obtain a regulated 5 V / 2 A supply and has a multimeter and
+10 kΩ/20 kΩ resistors. Speakers are reported as Sony XS-FB162E, 40 W, 8 Ω.
+Sony's model specification confirms 40 W rated power; nominal impedance should
+still be checked on each physical speaker label (do not substitute specifications
+for a similarly named Sony model). Either a 4 Ω or 8 Ω speaker is suitable for this
+low-power MAX98357A test, one per amplifier. The speaker's 40 W power handling is
+not a minimum amplifier requirement. At 5 V, the MAX98357A provides approximately
+1.4 W into 8 Ω or 2.5 W into 4 Ω at 1% THD, per the referenced breakout guide.
+A 5 V / 2 A supply is sufficient for the two-module low-level bench test.
 
 Each speaker connects only across its own amplifier's marked + and - outputs.
 Neither speaker terminal is ground; never join the speaker negative terminals.
@@ -53,8 +61,25 @@ Verify the right SD voltage with a multimeter before the listening test. Target
 about 1.0–1.2 V, away from channel-selection thresholds. The left SD should be
 about 3.3 V. A different breakout resistor network may require adjustment; do not
 infer the selected channel solely from the resistor marking. The signal wiring
-can be prepared now; amplifier power and channel straps await supply/speaker checks.
+can now be prepared using the supply and resistor arrangement above.
+
+## First powered checks (current silent boot firmware)
+
+1. With USB and amplifier supply disconnected, finish the shared signal/ground
+   wiring and connect external +5 V to both amplifier VIN pins. Keep the ESP32
+   powered via USB only; do not join external +5 V to carrier VIN or 3V3.
+2. Remove the temporary direct SD-to-GND shutdown jumpers and wire left SD to
+   3V3 and the right SD resistor divider. Leave GAIN open on both modules.
+3. Leave the speakers disconnected for these voltage checks. Power the ESP32 and
+   amplifiers, and measure relative to common GND: both VIN approximately 5 V,
+   left SD approximately 3.3 V, right SD approximately 1.0–1.2 V. Report readings
+   before moving to audio firmware; the current boot image generates no I2S.
+4. Disconnect both power sources before attaching each speaker to its own +/−
+   amplifier outputs. Neither output terminal connects to common GND or the other
+   amplifier. Begin listening only with the planned low-amplitude channel test.
 
 References:
 - [MAX98357A/B datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/MAX98357A-MAX98357B.pdf): I2S, supplies and SD_MODE selection.
 - [Adafruit mono breakout pinout](https://learn.adafruit.com/adafruit-max98357-i2s-class-d-mono-amp/pinouts): analogous breakout pull-up, gain settings, 3.3 V logic with 5 V supply and bridge-tied speaker outputs. The pictured clone is not assumed to have an identical schematic.
+
+Speaker reference: [Sony XS-FB162E specifications](https://www.sony.co.in/electronics/car-speakers/xs-fb162e/specifications).
