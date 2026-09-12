@@ -150,3 +150,15 @@ PASS heartbeats over an 18-second reset/boot capture. See
 [bench evidence](docs/bench/wroom-boot-2026-09-12.md) for toolchain pins, memory,
 image hash and local backup paths. Physical DAC wiring and radio memory/timing
 qualification remain separate next steps; this does not close T04/T05/T06.
+
+## WROOM network bench app (T07 started)
+
+`platform/esp32_lms` now provides a no-PSRAM Wi-Fi/DHCP + LMS PCM player with
+ignored local credentials, the physical Wi-Fi MAC identity, timed reconnect,
+32 KiB stereo reservoir and selectable I2S/timed-null output. The I2S adapter
+supports acknowledged pause/drain/resume; mono expands to stereo and LMS gain
+follows fixed −18 dB bench attenuation. Host regression exercises lifecycle,
+rate changes, volume and pause; physical association/playback remains pending.
+The network stack's 64 KiB heap is an explicit platform allocation exception;
+static image fit is not runtime memory/timing qualification. See the
+[app guide](platform/esp32_lms/README.md) for build and bench steps.

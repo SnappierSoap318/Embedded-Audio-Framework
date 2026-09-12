@@ -103,3 +103,26 @@ acquisition waits from the DSP compute measurement. Check the architecture's 40%
 compute budget and DMA queue margin with GPIO/cycle-counter evidence, document
 priorities/CPU assignments, and retain observed overruns. No physical timing result
 is implied by host sanitizer or simulated-kernel tests.
+
+## WROOM LMS bench application
+
+See [platform/esp32_lms](../platform/esp32_lms/README.md) for the actual ESP32
+Wi-Fi/I2S build and local credential handling. The network controller and timed
+null output also build under native_sim for host Clang diagnostics:
+
+```sh
+ZEPHYR_BASE=/tmp/eaf-zephyr cmake -S platform/esp32_lms -B build-lms-sim -G Ninja \
+  -DBOARD=native_sim/native/64 -DZEPHYR_TOOLCHAIN_VARIANT=host \
+  -DEXTRA_CONF_FILE=null.conf -DZEPHYR_MODULES="$PWD" \
+  -DPython3_EXECUTABLE=/tmp/eaf-zephyr-venv/bin/python \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build-lms-sim
+python3 tools/check_code.py build-lms-sim
+```
+
+This simulator has no Wi-Fi driver and cannot connect; it checks compilation and
+Clang diagnostics for the network controller, credentials adapter and output
+worker. The Xtensa build checks the real ESP32 driver integration with strict GCC
+warnings. `build-zephyr-bt-lms` supplies Clang coverage and runtime smoke for the
+I2S HAL. Native `board_output` uses a timed null backend to exercise repeated track
+lifecycle, mono expansion, gain/mute and pause without radio or amplifier hardware.

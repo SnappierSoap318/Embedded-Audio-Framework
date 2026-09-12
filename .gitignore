@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 compile_commands.json
 .vscode-ctags
+/platform/esp32_lms/credentials.local.h

@@ -64,6 +64,9 @@ There is no fixed finish date until these scopes and hardware gates are validate
 - [ ] **T07 — Network LMS board app.** Add Wi-Fi provisioning/configuration, static
   workers and source/graph owner handoff. Validate TCP/HTTP PCM, gain/mute/pause,
   sample-rate changes and network stalls using the user's server.
+  Software app and host regressions are implemented in `platform/esp32_lms`;
+  see its README for credentials and build steps. Physical Wi-Fi association,
+  server playback, runtime memory and recovery checks remain pending.
 - [ ] **T08 — Complete Bluetooth board app.** Add controller enable, SDP record,
   pairing/discoverability and bounded notification handoff. Coordinate queue purge,
   decoder reset and source arbitration across start/suspend/release/disconnect.
