@@ -17,3 +17,16 @@ config EAF_BOARD_WIFI_PS_NONE
       ESP-IDF defaults to WIFI_PS_MIN_MODEM, which wakes only at the AP DTIM
       period. On a mains-powered player, disabling power save removes those
       periodic receive stalls at the cost of higher idle current.
+config EAF_BOARD_AUDIO_CPU
+    int "Audio worker CPU (-1 unrestricted)"
+    default -1
+    help
+      With CONFIG_SMP and CONFIG_SCHED_CPU_MASK, pin the audio owner to this
+      CPU so network and decoder work cannot preempt it. -1 leaves it
+      unrestricted (required on single-core builds).
+config EAF_BOARD_MAIN_CPU
+    int "Main/transport CPU (-1 unrestricted)"
+    default -1
+    help
+      Pin the main transport thread (and its diagnostics web thread) away from
+      the audio CPU when SMP affinity is available.

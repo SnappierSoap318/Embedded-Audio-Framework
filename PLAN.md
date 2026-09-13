@@ -244,3 +244,21 @@ wall time (+5000 ms per 5 s), and underruns stayed at 0 for ~50 s then reached 1
 total over ~85 s (`failed=0`). Audible output was not independently verified and
 the destructive underrun-tail policy plus long-play/reconnect gates remain (R4).
 Evidence: docs/bench/wroom-lms-ingress-2026-09-13.md.
+
+## Reservoir continuity and single-core scheduling — 2026-09-13
+
+The reservoir no longer discards a short queued tail on underrun. A short pull
+in STREAMING now copies the available frames, ramps the shortfall toward silence
+from the last real sample, counts the underrun and resumes STREAMING on the next
+pull; PREBUFFERING remains a startup-only gate on the high watermark. This is the
+audit S07 direction: preserve partial PCM, pad output, avoid the previous
+discard-plus-refill-to-watermark gap. The reservoir regression asserts the new
+behavior (partial frames retained, immediate resume).
+
+Scheduling isolation could not use two cores: Zephyr 4.3.0's ESP32 Wi-Fi driver
+has `depends on !SMP`, so enabling `CONFIG_SMP` silently drops Wi-Fi. With
+networking, isolation is single-core: `CONFIG_NET_TCP_WORKER_PRIO` is raised to 5
+so the TCP worker no longer outranks EAF audio (3). The board keeps
+`EAF_BOARD_AUDIO_CPU` / `EAF_BOARD_MAIN_CPU` and `k_thread_cpu_pin` scaffolding,
+inert until a Zephyr Wi-Fi stack supports SMP. The WROVER/PSRAM buffer path
+remains the way to ride out multi-second network stalls.

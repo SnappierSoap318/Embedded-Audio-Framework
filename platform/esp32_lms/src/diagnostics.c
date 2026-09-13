@@ -107,4 +107,7 @@ static void run(void *a, void *b, void *c) {
 void board_diagnostics_start(void) {
     (void)k_thread_create(&web_thread, web_stack, K_THREAD_STACK_SIZEOF(web_stack), run, NULL, NULL,
                           NULL, 7, 0, K_NO_WAIT);
+#if defined(CONFIG_SCHED_CPU_MASK) && CONFIG_EAF_BOARD_MAIN_CPU >= 0
+    (void)k_thread_cpu_pin(&web_thread, CONFIG_EAF_BOARD_MAIN_CPU);
+#endif
 }

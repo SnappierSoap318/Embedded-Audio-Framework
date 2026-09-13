@@ -110,6 +110,9 @@ attempting synchronized playback; the underlying T tasks below remain open.
   Test early next-track arrival, half-open connections and server restart (T10–T12).
 - [ ] **R4 — Continuity/interoperability:** explicitly review underrun-tail policy,
   framing/format negotiation and configurable bench attenuation (T13/T15/T21).
+  Underrun-tail policy changed to preserve queued PCM and resume immediately
+  (startup still prebuffers); regression updated. Framing negotiation and
+  configurable bench attenuation remain.
 - [ ] **R5 — Timed sync:** schedule frame/timestamp controls only after presentation
   accounting and standalone playback are qualified (T19/T20).
 

@@ -69,6 +69,9 @@ static void wifi_health(void) {
                          (unsigned)status.dtim_period, (unsigned)status.beacon_interval);
 }
 int main(void) {
+#if defined(CONFIG_SCHED_CPU_MASK) && CONFIG_EAF_BOARD_MAIN_CPU >= 0
+    (void)k_thread_cpu_pin(k_current_get(), CONFIG_EAF_BOARD_MAIN_CPU);
+#endif
     board_diagnostics_start();
     const char *ssid = board_wifi_ssid(), *password = board_wifi_password();
     size_t ssid_length = strlen(ssid), password_length = strlen(password);

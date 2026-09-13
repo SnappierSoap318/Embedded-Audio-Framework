@@ -3,6 +3,9 @@
 #include <eaf/eaf_core.h>
 #include <eaf/eaf_dsp.h>
 #include <stdio.h>
+#ifndef CONFIG_EAF_BOARD_AUDIO_CPU
+#define CONFIG_EAF_BOARD_AUDIO_CPU -1
+#endif
 #define CAPACITY 4096u
 static eaf_reservoir_t reservoir;
 static eaf_pipeline_t pipeline;
@@ -160,7 +163,7 @@ static int start_common(void *ctx, const eaf_format_t *fmt, uint32_t watermark, 
     hal_atomic_set(&pause_ack, 0);
     hal_atomic_set(&done, 0);
     hal_atomic_set(&process_calls, 0);
-    const eaf_thread_options_t scheduling = {EAF_THREAD_AUDIO, -1, false};
+    const eaf_thread_options_t scheduling = {EAF_THREAD_AUDIO, CONFIG_EAF_BOARD_AUDIO_CPU, false};
     rc = hal_thread_create_with_options(&audio, consume, NULL, &scheduling);
     if (rc) {
         board_log("Output setup failed rc=%d", rc);
