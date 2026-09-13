@@ -117,6 +117,11 @@ static bool online(void) {
     return atomic_load(&associated) &&
            net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED) != NULL;
 }
+static void wifi_health(void) {
+    struct wifi_iface_status status;
+    if (!net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status, sizeof(status)))
+        board_log("Wi-Fi rssi=%d dtim=%u\n", status.rssi, (unsigned)status.dtim_period);
+}
 static int connect_wifi(void) {
     atomic_store(&associated, false);
     net_dhcpv4_start(iface);
@@ -247,6 +252,7 @@ int main(void) {
                           (int)player.synchronized, (long long)(player.last_latency_us / 1000),
                           eaf_board_output_level(), eaf_board_output_flags(),
                           (unsigned long long)rate);
+                wifi_health();
                 previous_rx = client.rx_total;
                 previous_ms = now;
                 report = now + 5000;
