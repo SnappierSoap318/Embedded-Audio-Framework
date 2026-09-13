@@ -262,3 +262,19 @@ so the TCP worker no longer outranks EAF audio (3). The board keeps
 `EAF_BOARD_AUDIO_CPU` / `EAF_BOARD_MAIN_CPU` and `k_thread_cpu_pin` scaffolding,
 inert until a Zephyr Wi-Fi stack supports SMP. The WROVER/PSRAM buffer path
 remains the way to ride out multi-second network stalls.
+
+## PSRAM reservoir and board capability split — 2026-09-13
+
+The output reservoir capacity is now `CONFIG_EAF_BOARD_RESERVOIR_FRAMES` (power of
+two) instead of a hardcoded 4096, and `CONFIG_EAF_BOARD_USE_PSRAM` allocates its
+storage from the ESP32 external-RAM shared heap (`shared_multi_heap_alloc`,
+`SMH_REG_ATTR_EXTERNAL`) during `board_output_init`, before START. The portable
+reservoir already takes caller-owned storage, so no core change was needed.
+
+Two profiles build from the same app: WROOM (internal RAM, 4096 frames) and
+WROVER-E/N16R8 (`psram.conf` + `psram.overlay`, 8 MB PSRAM, 65536-frame reservoir
+about 1.5 s, external heap 2 MB). The larger reservoir also stops clamping the LMS
+stream threshold (261120 B) that the WROOM profile has to cap at 92 ms. The
+DevKitC board already selects the WROVER-E N4R8 SoC, so the PSRAM node exists and
+the profile overlay re-enables it. WROVER build: DRAM0 74%, ext_ram_seg 2 MB,
+Wi-Fi enabled; physical map/cache/stress validation remains T22.

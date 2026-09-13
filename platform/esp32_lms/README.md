@@ -48,6 +48,24 @@ a timed null sink. The I2S image has passed physical Wi-Fi/DHCP and LMS registra
 audible output and the null image remain unqualified. See
 [bench evidence](../../docs/bench/wroom-lms-2026-09-12.md).
 
+## Board profiles
+
+The application is one source tree with per-board configuration:
+
+- **ESP32-WROOM (internal RAM, default).** `boards/esp32_devkitc_esp32_procpu.conf`
+  disables PSRAM, uses a 4096-frame reservoir and a 16 KiB LMS ingress ring.
+- **ESP32-WROVER-E / N16R8 (PSRAM).** Add `-DEXTRA_CONF_FILE=psram.conf
+  -DEXTRA_DTC_OVERLAY_FILE=psram.overlay` to the configure command above and build
+  in a separate directory (for example `build-wrover-lms`). This enables the 8 MB
+  SPI RAM and allocates a 65536-frame (512 KiB, about 1.5 s) stereo reservoir from
+  the external heap via `EAF_BOARD_USE_PSRAM`. The DevKitC board already selects
+  the WROVER-E N4R8 SoC, so the 8 MB PSRAM node exists and the overlay re-enables it.
+
+The profile is the output reservoir capacity and its placement; it is the buffer
+that rides out network stalls. `CONFIG_EAF_BOARD_RESERVOIR_FRAMES` (power of two)
+and `CONFIG_EAF_BOARD_USE_PSRAM` are in `platform/esp32_lms/Kconfig`; both build
+profiles keep the same portable core and HAL.
+
 ## Board verification when wiring is ready
 
 Follow [the wiring checks](../../docs/bench/wroom-max98357a-wiring.md) first.

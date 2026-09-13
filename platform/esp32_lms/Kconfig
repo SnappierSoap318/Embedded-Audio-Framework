@@ -30,3 +30,19 @@ config EAF_BOARD_MAIN_CPU
     help
       Pin the main transport thread (and its diagnostics web thread) away from
       the audio CPU when SMP affinity is available.
+config EAF_BOARD_RESERVOIR_FRAMES
+    int "Output reservoir capacity in frames (power of two)"
+    default 4096
+    range 512 1048576
+    help
+      Stereo Q1.31 output reservoir capacity. It also caps the startup
+      prefill, so it must cover the LMS stream/output thresholds the board
+      wants to honor. Must be a power of two.
+config EAF_BOARD_USE_PSRAM
+    bool "Place the output reservoir in external SPI RAM"
+    default n
+    depends on ESP_SPIRAM
+    help
+      Allocate the reservoir from the ESP32 external RAM shared heap instead of
+      internal DRAM. Enables the large-buffer WROVER profile; requires a board
+      build with CONFIG_ESP_SPIRAM and PSRAM fitted.

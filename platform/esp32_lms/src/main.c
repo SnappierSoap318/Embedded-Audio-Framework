@@ -12,8 +12,9 @@
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/wifi_mgmt.h>
 #include <zephyr/sys/byteorder.h>
-BUILD_ASSERT(!IS_ENABLED(CONFIG_ESP_SPIRAM), "WROOM application requires internal RAM");
 BUILD_ASSERT(!IS_ENABLED(CONFIG_BT), "Qualify Wi-Fi alone before enabling Bluetooth");
+BUILD_ASSERT(!IS_ENABLED(CONFIG_EAF_BOARD_USE_PSRAM) || IS_ENABLED(CONFIG_ESP_SPIRAM),
+             "PSRAM reservoir requires CONFIG_ESP_SPIRAM");
 static eaf_lms_client_t client;
 static struct net_if *iface;
 static struct net_mgmt_event_callback events;

@@ -166,6 +166,9 @@ attempting synchronized playback; the underlying T tasks below remain open.
   parts, enable PSRAM for the reservoir only after map/cache tests; verify internal
   DMA buffers. Run memory pressure and simultaneous Wi-Fi/BT stress. Do not infer
   compatibility solely from a reseller memory suffix or LouderESP32 similarity.
+  The PSRAM profile (`psram.conf` + `psram.overlay`, 65536-frame reservoir from the
+  external shared heap) builds with Wi-Fi enabled and DRAM0 at 74%; physical map,
+  cache and stress validation on the actual module still required.
 - [ ] **T23 — TAS5805M integration.** Obtain carrier schematic, power/PDN/I2C address
   and clock requirements. Add HAL control driver and board initialization sequence,
   mute/ramp/fault handling, register profile and reset/recovery tests. Verify I2S

@@ -3,13 +3,25 @@
 #include <eaf/eaf_core.h>
 #include <eaf/eaf_dsp.h>
 #include <stdio.h>
+#if defined(CONFIG_EAF_BOARD_USE_PSRAM)
+#include <zephyr/multi_heap/shared_multi_heap.h>
+#endif
 #ifndef CONFIG_EAF_BOARD_AUDIO_CPU
 #define CONFIG_EAF_BOARD_AUDIO_CPU -1
 #endif
-#define CAPACITY 4096u
+#ifndef CONFIG_EAF_BOARD_RESERVOIR_FRAMES
+#define CONFIG_EAF_BOARD_RESERVOIR_FRAMES 4096
+#endif
+#define CAPACITY ((uint32_t)CONFIG_EAF_BOARD_RESERVOIR_FRAMES)
+_Static_assert((CONFIG_EAF_BOARD_RESERVOIR_FRAMES & (CONFIG_EAF_BOARD_RESERVOIR_FRAMES - 1)) == 0,
+               "EAF_BOARD_RESERVOIR_FRAMES must be a power of two");
 static eaf_reservoir_t reservoir;
 static eaf_pipeline_t pipeline;
+#if defined(CONFIG_EAF_BOARD_USE_PSRAM)
+static int32_t *storage;
+#else
 static int32_t storage[CAPACITY * 2u];
+#endif
 static eaf_sink_t *sink;
 static uint8_t input_channels;
 static eaf_volume_ctx_t volume = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};
@@ -226,6 +238,13 @@ static void eof(void *ctx) {
 }
 
 int board_output_init(void) {
+#if defined(CONFIG_EAF_BOARD_USE_PSRAM)
+    storage = shared_multi_heap_alloc(SMH_REG_ATTR_EXTERNAL, sizeof(int32_t) * CAPACITY * 2u);
+    if (!storage) {
+        board_log("PSRAM reservoir allocation failed (%u frames)", CAPACITY);
+        return EAF_IO;
+    }
+#endif
     sink = board_sink();
     return board_sink_init();
 }
