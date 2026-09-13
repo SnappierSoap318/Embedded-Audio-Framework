@@ -208,13 +208,13 @@ int main(void) {
     eaf_sendspin_player_init(&player, board_write, NULL);
 
     uint32_t capacity = eaf_board_output_capacity_frames();
-    uint32_t capacity_ms = capacity * 1000u / 48000u;
+    uint32_t capacity_ms = capacity * 1000u / CONFIG_EAF_SAMPLE_RATE;
     eaf_sendspin_config_t config = {.client_id = "eaf-sendspin-wroom",
                                     .name = "EAF Sendspin WROOM",
                                     .product_name = "EAF Sendspin WROOM",
                                     .manufacturer = "EAF",
                                     .software_version = "phase2",
-                                    .sample_rate = 44100,
+                                    .sample_rate = CONFIG_EAF_SAMPLE_RATE,
                                     .bit_depth = 16,
                                     .support_volume = true,
                                     .support_mute = true,

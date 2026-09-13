@@ -28,6 +28,13 @@ config EAF_BYTES_PER_FRAME
     int "Source bytes per frame (channels * sample size)"
     default 2 if EAF_SOURCE_CHANNELS = 1
     default 4
+config EAF_SAMPLE_RATE
+    int "Source sample rate advertised to the server"
+    default 44100
+    range 8000 192000
+    help
+      Music Assistant transcodes to this rate. Lowering it (for example 22050)
+      further reduces the network rate when even mono 44.1 kHz is marginal.
 config EAF_BOARD_WIFI_PS_NONE
     bool "Disable Wi-Fi modem sleep for lower latency"
     default y
