@@ -278,3 +278,17 @@ stream threshold (261120 B) that the WROOM profile has to cap at 92 ms. The
 DevKitC board already selects the WROVER-E N4R8 SoC, so the PSRAM node exists and
 the profile overlay re-enables it. WROVER build: DRAM0 74%, ext_ram_seg 2 MB,
 Wi-Fi enabled; physical map/cache/stress validation remains T22.
+
+## STAT stream fields regression — 2026-09-13
+
+Reporting the raw ingress ring as STAT `stream_buffer_size`/`stream_buffer_fullness`
+was a regression on the WROOM. The ring reads as 100% full whenever the output
+reservoir is backpressured, and because STAT is sent once per second, LMS paused
+the HTTP stream until the next report. The 93 ms reservoir then drained and the
+output underran continuously (~26% intake, ~274 underruns in the first second
+after release, then an LMS pause). The truthful monotonic `jiffies` field is
+kept; the stream/output buffer fields are back to zero and the speculative
+STMo/STMu emissions are removed, restoring TCP flow control. Reintroduce S04
+only with a stream buffer large enough that fullness stays well below 100%
+between reports (the WROVER/PSRAM profile) or far more frequent updates, and
+validate on hardware before trusting it.
