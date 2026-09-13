@@ -58,7 +58,9 @@ int main(void) {
     CHECK(!cb.start_buffered(NULL, &stereo, &request, &limits));
     CHECK(limits.capacity_frames == 4096 && limits.ready_frames == 3072 && !limits.clamped);
     CHECK(!hal_atomic_get(&run_gate));
+    CHECK(board_output_flags() == 1u && board_output_process_calls() == 0u);
     CHECK(!cb.pause(NULL, true));
+    CHECK(board_output_flags() == 13u);
     CHECK(!cb.pause(NULL, false));
     CHECK(!hal_atomic_get(&run_gate));
     CHECK(cb.pcm(NULL, channels, 2) == 2);
@@ -68,6 +70,7 @@ int main(void) {
     CHECK(!cb.release(NULL));
     wait_done();
     CHECK(reservoir.frames_read == 2 && !reservoir.underruns);
+    CHECK(board_output_flags() == 19u && board_output_process_calls() > 0u);
     cb.stop(NULL);
     request.stream_bytes = 255u * 1024u;
     request.output_ms = 25500;

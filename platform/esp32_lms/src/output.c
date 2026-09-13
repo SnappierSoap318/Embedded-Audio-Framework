@@ -40,7 +40,7 @@ static void apply_volume(void) {
 static eaf_thread_t audio;
 static eaf_atomic_u32_t quit, elapsed, played, failed, pause_request, pause_ack, done, run_gate;
 static bool active;
-static eaf_atomic_u32_t underruns, queue_min;
+static eaf_atomic_u32_t underruns, queue_min, process_calls;
 static void consume(void *ctx) {
     (void)ctx;
     /* No graph access until START has reset the reservoir and enabled output. */
@@ -64,6 +64,7 @@ static void consume(void *ctx) {
         }
         apply_volume();
         int rc = eaf_pipeline_process(&pipeline);
+        hal_atomic_set(&process_calls, hal_atomic_get(&process_calls) + 1u);
         if (rc && rc != EAF_EOF) {
             board_log("Audio process failed rc=%d state=%d", rc, (int)pipeline.state);
             hal_atomic_set(&failed, 1);
@@ -87,6 +88,7 @@ static void consume(void *ctx) {
 }
 static int pause_output(void *ctx, bool paused) {
     (void)ctx;
+    board_log("Output pause request=%u", paused ? 1u : 0u);
     hal_atomic_set(&pause_request, paused ? 1u : 0u);
     /* Before initial release the worker cannot touch graph or sink yet. */
     if (!hal_atomic_get(&run_gate)) {
@@ -157,6 +159,7 @@ static int start_common(void *ctx, const eaf_format_t *fmt, uint32_t watermark, 
     hal_atomic_set(&pause_request, 0);
     hal_atomic_set(&pause_ack, 0);
     hal_atomic_set(&done, 0);
+    hal_atomic_set(&process_calls, 0);
     const eaf_thread_options_t scheduling = {EAF_THREAD_AUDIO, -1, false};
     rc = hal_thread_create_with_options(&audio, consume, NULL, &scheduling);
     if (rc) {
@@ -252,4 +255,13 @@ uint32_t board_output_underruns(void) {
 uint32_t board_output_queue_min(void) {
     uint32_t level = hal_atomic_get(&queue_min);
     return level == UINT32_MAX ? 0 : level;
+}
+
+uint32_t board_output_process_calls(void) {
+    return hal_atomic_get(&process_calls);
+}
+uint32_t board_output_flags(void) {
+    return (active ? 1u : 0u) | (hal_atomic_get(&run_gate) ? 2u : 0u) |
+           (hal_atomic_get(&pause_request) ? 4u : 0u) | (hal_atomic_get(&pause_ack) ? 8u : 0u) |
+           (hal_atomic_get(&done) ? 16u : 0u);
 }

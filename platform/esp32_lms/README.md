@@ -156,3 +156,14 @@ Short or empty EOF qualifies for release without reaching the watermark.
 No additional ingress ring or task is allocated. Existing underrun-tail handling
 and completion/synchronization limitations remain for R3–R5. Physical long-play
 and controlled network-gap tests are still required before closing R1/R2.
+
+Worker diagnostics distinguish a full queue caused by pause from a stalled sink:
+`flags` is a bitmask (active=1, released=2, pause requested=4, pause acknowledged=8,
+worker exited=16). `calls` counts completed pipeline calls, including silence
+while rebuffering. A released active worker normally reports 3; a paused one
+reports 15. These independently sampled fields are diagnostic, not a synchronized
+state snapshot. `HTTP`, `eof` and `gates` report HTTP-open, delivered input EOF,
+and wait-cont/wait-start respectively. Pause callback requests are logged explicitly.
+A full queue with unchanged calls and flags=3 warrants sink/worker investigation;
+a full queue with flags=15 reflects a requested pause. Neither implies a proven
+hardware or network cause by itself.

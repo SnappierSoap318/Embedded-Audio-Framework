@@ -132,6 +132,10 @@ int main(void) {
                           active ? snapshot.queued_bytes : 0u, board_output_queue_min(),
                           active ? snapshot.elapsed_ms : 0u, board_output_underruns(),
                           board_output_failed() ? 1u : 0u);
+                board_log("Worker flags=%u calls=%u HTTP=%u eof=%u gates=%u/%u",
+                          board_output_flags(), board_output_process_calls(),
+                          client.http.open ? 1u : 0u, client.input_eof ? 1u : 0u,
+                          client.wait_cont ? 1u : 0u, client.wait_start ? 1u : 0u);
                 previous_bytes = d->http_bytes;
                 previous_diagnostic = now;
                 diagnostic = now + 5000;
