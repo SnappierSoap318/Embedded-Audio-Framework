@@ -107,7 +107,8 @@ is implied by host sanitizer or simulated-kernel tests.
 ## WROOM LMS bench application
 
 See [platform/esp32_lms](../platform/esp32_lms/README.md) for the actual ESP32
-Wi-Fi/I2S build and local credential handling. The network controller and timed
+Wi-Fi/I2S build and local credential handling. For uploading firmware and
+reading UART or wireless logs, follow [flash and inspect the ESP32](zephyr-setup.md#flash-and-inspect-the-esp32). The network controller and timed
 null output also build under native_sim for host Clang diagnostics:
 
 ```sh

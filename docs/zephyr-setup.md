@@ -107,3 +107,58 @@ absolute paths. The current migrated builds are `build-wroom-wireless` (I2S),
 Older build directories can still contain `/tmp` paths and should be reconfigured
 in fresh directories before reuse. No source, SDK, blob or virtual environment
 belongs in Git.
+
+## Flash and inspect the ESP32
+
+Run from the repository root after setting the environment above. Connect the
+board with a USB data cable. Close any serial monitor before flashing. These
+commands target the original ESP32 WROOM with 4 MB flash and the bench app's
+simple-boot image at `0x1000`; do not reuse that offset for other boot layouts.
+Flashing replaces the installed firmware.
+
+Select the serial port and build directory:
+
+```sh
+ls /dev/serial/by-id/
+export EAF_SERIAL_PORT=/dev/ttyUSB0
+export EAF_FLASH_BUILD=build-wroom-wireless
+```
+
+`build-wroom-wireless` is the current I2S build. If you followed the fresh LMS
+build example, use `build-wroom-lms` instead. Use `build-wireless-null` for the
+current silent connectivity image, or `build-wroom` for the UART-only boot test.
+A `/dev/serial/by-id/...` path can replace `/dev/ttyUSB0` for stable identification.
+
+Confirm the chip and flash size, then optionally save the existing 4 MB flash
+before replacing it. The backup can contain credentials; keep it in ignored
+local storage:
+
+```sh
+esptool --port "$EAF_SERIAL_PORT" chip-id
+esptool --port "$EAF_SERIAL_PORT" flash-id
+mkdir -p build-deps/backups
+esptool --chip esp32 --port "$EAF_SERIAL_PORT" --baud 460800 \
+  read-flash 0 0x400000 "build-deps/backups/wroom-$(date +%Y%m%d-%H%M%S).bin"
+```
+
+Build successfully before issuing the separate flash command:
+
+```sh
+cmake --build "$EAF_FLASH_BUILD"
+esptool --chip esp32 --port "$EAF_SERIAL_PORT" --baud 460800 \
+  write-flash 0x1000 "$EAF_FLASH_BUILD/zephyr/zephyr.bin"
+python -m serial.tools.miniterm "$EAF_SERIAL_PORT" 115200
+```
+
+Exit miniterm with **Ctrl+]**. If the boot messages have already scrolled past,
+press the board's **EN/reset** button with the monitor open. If esptool remains
+at `Connecting...`, hold **BOOT**, tap **EN**, and release BOOT once it connects.
+Retry at `--baud 115200` if transfers are unreliable. A permission-denied error
+requires serial-device access for your user (check the device's group and your
+OS's serial-port permissions); do not run competing monitors on the same port.
+
+For the LMS image, expect `Wi-Fi IPv4: ...` and `LMS connected`. Open
+`http://<board-ip>/` for wireless application logs, or `/logs` for plain text.
+Wireless logs require Wi-Fi and the HTTP service to be running; use UART for
+boot failures. Follow the [LMS bench checks](../platform/esp32_lms/README.md#board-verification-when-wiring-is-ready)
+to test playback. A successful flash verifies transfer, not working audio.
