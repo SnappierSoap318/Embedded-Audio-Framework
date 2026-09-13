@@ -33,6 +33,16 @@ config EAF_I2S
 config EAF_LMS_CLIENT
 	bool "LMS TCP/HTTP raw PCM client"
 	depends on EAF_LMS && NET_SOCKETS
+config EAF_LMS_INGRESS_BYTES
+	int "Raw PCM ingress ring bytes for the LMS client"
+	default 4096
+	range 1024 65536
+	depends on EAF_LMS_CLIENT
+	help
+	  Fixed raw source-PCM buffer between the socket and the output callback.
+	  The transport keeps draining the socket into this ring while the output
+	  reservoir is backpressured, so the server's TCP window stays open. Boards
+	  without PSRAM should size it within internal RAM.
 config EAF_BT_A2DP
 	bool "Zephyr Classic A2DP SBC sink binding"
 	depends on EAF_BT_INGRESS && BT_CLASSIC && BT_A2DP_SINK

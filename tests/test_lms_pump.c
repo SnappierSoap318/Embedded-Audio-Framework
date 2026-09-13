@@ -276,9 +276,12 @@ int main(void) {
     setup(2, 2, 44100);
     accept_limit = 0;
     CHECK(!eaf_lms_client_pump(&client, 64, 1000, &result));
-    CHECK(result.steps == 2 && result.backpressured && reads == 1);
+    /* The ingress ring keeps draining the socket while the output callback is
+       backpressured, until the ring itself fills. */
+    CHECK(result.backpressured && reads > 1);
+    unsigned filled = reads;
     CHECK(!eaf_lms_client_pump(&client, 64, 1000, &result));
-    CHECK(result.steps == 1 && !result.progressed && reads == 1);
+    CHECK(result.steps == 1 && !result.progressed && reads == filled);
     /* STOP still arrives while the PCM consumer is blocked. */
     memset(control, 0, sizeof(control));
     control[1] = 28;

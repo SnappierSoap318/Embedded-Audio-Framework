@@ -287,21 +287,33 @@ static int headers(eaf_lms_client_t *c) {
         c->body_done = true;
     return enqueue(c, "RESP", c->header, c->header_used);
 }
-static int decode(eaf_lms_client_t *c, const uint8_t *p, size_t n) {
-    size_t frame_bytes = (size_t)c->width * c->format.num_channels;
-    if (c->has_length && n > c->remaining)
+/* Copy received body bytes into the fixed ingress ring. Content-length is
+   accounted when bytes arrive, independent of when they are later decoded. */
+static int ingress_fill(eaf_lms_client_t *c, const uint8_t *p, size_t n) {
+    if (!n)
+        return EAF_OK;
+    if (n > sizeof(c->ingress) - c->ingress_used)
         return EAF_INVALID;
-    c->bytes_received += n;
     if (c->has_length) {
+        if (n > c->remaining)
+            return EAF_INVALID;
         c->remaining -= n;
         c->body_done = !c->remaining;
     }
-    for (size_t i = 0; i < n; ++i) {
-        c->tail[c->tail_used++] = p[i];
+    c->bytes_received += n;
+    memcpy(c->ingress + c->ingress_used, p, n);
+    c->ingress_used += n;
+    return EAF_OK;
+}
+/* Decode buffered body bytes into the bounded PCM chunk. Stops early when the
+   chunk fills; the unwritten tail stays in the ring for the next step. */
+static int ingress_decode(eaf_lms_client_t *c) {
+    size_t frame_bytes = (size_t)c->width * c->format.num_channels;
+    size_t consumed = 0;
+    while (c->pcm_count < EAF_LMS_PCM_FRAMES && consumed < c->ingress_used) {
+        c->tail[c->tail_used++] = c->ingress[consumed++];
         if (c->tail_used != frame_bytes)
             continue;
-        if (c->pcm_count >= EAF_LMS_PCM_FRAMES)
-            return EAF_IO;
         for (size_t ch = 0; ch < c->format.num_channels; ++ch) {
             uint32_t raw = 0;
             for (size_t b = 0; b < c->width; ++b) {
@@ -317,6 +329,33 @@ static int decode(eaf_lms_client_t *c, const uint8_t *p, size_t n) {
         }
         ++c->pcm_count;
         c->tail_used = 0;
+    }
+    if (consumed) {
+        memmove(c->ingress, c->ingress + consumed, c->ingress_used - consumed);
+        c->ingress_used -= consumed;
+    }
+    return EAF_OK;
+}
+static int flush_pcm(eaf_lms_client_t *c) {
+    if (c->pcm_sent >= c->pcm_count)
+        return EAF_OK;
+    uint32_t left = c->pcm_count - c->pcm_sent;
+    c->stage = EAF_LMS_STAGE_PCM;
+    uint32_t wrote = c->callbacks.pcm(c->callbacks.ctx,
+                                      c->pcm + (size_t)c->pcm_sent * c->format.num_channels, left);
+    if (wrote > left)
+        return EAF_INVALID;
+    c->pcm_sent += wrote;
+    c->diagnostics.pcm_frames += wrote;
+    if (c->buffered_output && !c->output_released) {
+        if (wrote > c->buffer_limits.capacity_frames - c->prefill_frames)
+            return EAF_INVALID;
+        c->prefill_frames += wrote;
+    }
+    c->step_progress |= wrote != 0;
+    if (wrote < left) {
+        ++c->diagnostics.backpressure;
+        c->step_backpressure = true;
     }
     return EAF_OK;
 }
@@ -360,7 +399,8 @@ static int pump_http(eaf_lms_client_t *c) {
        private chunk until start; buffer-aware callbacks can prefill held output. */
     if (c->headers_done && c->wait_cont)
         return EAF_OK;
-    if (!c->buffered_output && c->headers_done && c->wait_start && (c->pcm_count || c->body_done)) {
+    if (!c->buffered_output && c->headers_done && c->wait_start &&
+        (c->pcm_count || c->ingress_used || c->body_done)) {
         if (!c->ready_sent) {
             int rc = status(c, "STMl", 0);
             if (rc)
@@ -370,31 +410,25 @@ static int pump_http(eaf_lms_client_t *c) {
         }
         return EAF_OK;
     }
-    if (c->pcm_sent < c->pcm_count) {
-        uint32_t left = c->pcm_count - c->pcm_sent;
-        c->stage = EAF_LMS_STAGE_PCM;
-        uint32_t wrote = c->callbacks.pcm(
-            c->callbacks.ctx, c->pcm + (size_t)c->pcm_sent * c->format.num_channels, left);
-        if (wrote > left)
-            return EAF_INVALID;
-        c->pcm_sent += wrote;
-        c->diagnostics.pcm_frames += wrote;
-        if (c->buffered_output && !c->output_released) {
-            if (wrote > c->buffer_limits.capacity_frames - c->prefill_frames)
-                return EAF_INVALID;
-            c->prefill_frames += wrote;
+    /* Drain decoded PCM to the output callback, then refill from the ring. */
+    int rc = flush_pcm(c);
+    if (rc)
+        return rc;
+    if (c->pcm_sent == c->pcm_count) {
+        c->pcm_count = 0;
+        c->pcm_sent = 0;
+        rc = ingress_decode(c);
+        if (rc)
+            return rc;
+        if (c->pcm_count) {
+            c->step_progress = true;
+            rc = flush_pcm(c);
+            if (rc)
+                return rc;
         }
-        c->step_progress |= wrote != 0;
-        if (wrote < left) {
-            ++c->diagnostics.backpressure;
-            c->step_backpressure = true;
-        }
-        if (c->pcm_sent < c->pcm_count)
-            return EAF_OK;
     }
-    c->pcm_count = 0;
-    c->pcm_sent = 0;
-    if (c->body_done) {
+    /* Source complete once the body, ring and chunk are all consumed. */
+    if (c->body_done && !c->ingress_used && c->pcm_sent == c->pcm_count) {
         if (c->tail_used)
             return EAF_INVALID;
         c->step_progress = true;
@@ -403,11 +437,15 @@ static int pump_http(eaf_lms_client_t *c) {
         hal_tcp_close(&c->http);
         return c->buffered_output ? service_buffered(c) : status(c, "STMd", 0);
     }
+    /* Keep draining the socket into the ring even while the output callback is
+       backpressured; the ring, not the output reservoir, caps socket reads. */
+    if (c->body_done || c->ingress_used >= sizeof(c->ingress))
+        return EAF_OK;
     size_t n = 0;
     if (c->request_sent < c->request_used) {
         c->stage = EAF_LMS_STAGE_HTTP_SEND;
-        int rc = hal_tcp_send(&c->http, c->request + c->request_sent,
-                              c->request_used - c->request_sent, &n);
+        rc = hal_tcp_send(&c->http, c->request + c->request_sent, c->request_used - c->request_sent,
+                          &n);
         if (rc == EAF_AGAIN)
             return EAF_OK;
         if (rc)
@@ -416,14 +454,16 @@ static int pump_http(eaf_lms_client_t *c) {
         c->step_progress |= n != 0;
         return EAF_OK;
     }
+    size_t space = sizeof(c->ingress) - c->ingress_used;
+    size_t want = space < sizeof(c->rx) ? space : sizeof(c->rx);
     c->stage = EAF_LMS_STAGE_HTTP_RECV;
-    int rc = hal_tcp_recv(&c->http, c->rx, sizeof(c->rx), &n);
+    rc = hal_tcp_recv(&c->http, c->rx, want, &n);
     if (rc == EAF_AGAIN) {
         ++c->diagnostics.recv_again;
         return EAF_OK;
     }
     if (rc == EAF_EOF) {
-        if (!c->headers_done || (c->has_length && c->remaining) || c->tail_used)
+        if (!c->headers_done || (c->has_length && c->remaining))
             return EAF_IO;
         c->body_done = true;
         c->step_progress = true;
@@ -450,7 +490,7 @@ static int pump_http(eaf_lms_client_t *c) {
         }
     }
     c->stage = EAF_LMS_STAGE_DECODE;
-    return decode(c, c->rx + i, n - i);
+    return ingress_fill(c, c->rx + i, n - i);
 }
 int eaf_lms_client_step(eaf_lms_client_t *c) {
     if (!c)

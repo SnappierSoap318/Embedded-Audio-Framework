@@ -2,6 +2,13 @@
 #include <eaf/eaf_lms.h>
 #include <eaf/eaf_net.h>
 #define EAF_LMS_PCM_FRAMES 512u
+/* Raw source PCM retained between the socket and the output callback. It lets
+   the transport keep draining the socket while the output reservoir is full,
+   so the server's TCP window stays open instead of stalling on backpressure.
+   Boards select the size; the default keeps the Linux harness bounded. */
+#ifndef EAF_LMS_INGRESS_BYTES
+#define EAF_LMS_INGRESS_BYTES 4096u
+#endif
 typedef struct {
     uint32_t stream_bytes, output_ms;
     uint8_t sample_bytes;
@@ -81,6 +88,8 @@ typedef struct {
     size_t tx_used, tx_sent, request_used, request_sent, header_used, tail_used;
     int32_t pcm[EAF_LMS_PCM_FRAMES * 2u];
     uint32_t pcm_count, pcm_sent;
+    uint8_t ingress[EAF_LMS_INGRESS_BYTES];
+    size_t ingress_used;
     eaf_format_t format;
     unsigned width;
     bool big_endian, headers_done, streaming, body_done, has_length;
