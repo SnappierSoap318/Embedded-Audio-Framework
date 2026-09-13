@@ -10,3 +10,10 @@ config EAF_BOARD_I2S
 config EAF_BOARD_SERVER
     string "LMS numeric IPv4 address"
     default "192.168.11.132"
+config EAF_BOARD_WIFI_PS_NONE
+    bool "Disable Wi-Fi modem sleep for lower latency"
+    default y
+    help
+      ESP-IDF defaults to WIFI_PS_MIN_MODEM, which wakes only at the AP DTIM
+      period. On a mains-powered player, disabling power save removes those
+      periodic receive stalls at the cost of higher idle current.

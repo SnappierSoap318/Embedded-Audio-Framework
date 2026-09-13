@@ -5,6 +5,9 @@
 #include <zephyr/net/net_if.h>
 
 /* dhcpv4.h requires the net_if declaration first. */
+#if defined(CONFIG_WIFI_ESP32)
+#include <esp_wifi.h>
+#endif
 #include <zephyr/net/dhcpv4.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/wifi_mgmt.h>
@@ -54,7 +57,16 @@ static int connect_wifi(void) {
     if (!ip)
         return EAF_IO;
     board_log("Wi-Fi IPv4: %s", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
+#if defined(CONFIG_WIFI_ESP32) && defined(CONFIG_EAF_BOARD_WIFI_PS_NONE)
+    board_log("Wi-Fi power save off rc=%d", (int)esp_wifi_set_ps(WIFI_PS_NONE));
+#endif
     return EAF_OK;
+}
+static void wifi_health(void) {
+    struct wifi_iface_status status;
+    if (!net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status, sizeof(status)))
+        board_log_memory("Wi-Fi rssi=%d dtim=%u beacon=%u", status.rssi,
+                         (unsigned)status.dtim_period, (unsigned)status.beacon_interval);
 }
 int main(void) {
     board_diagnostics_start();
@@ -137,6 +149,7 @@ int main(void) {
                                  board_output_flags(), board_output_process_calls(),
                                  client.http.open ? 1u : 0u, client.input_eof ? 1u : 0u,
                                  client.wait_cont ? 1u : 0u, client.wait_start ? 1u : 0u);
+                wifi_health();
                 previous_bytes = d->http_bytes;
                 previous_diagnostic = now;
                 diagnostic = now + 5000;
