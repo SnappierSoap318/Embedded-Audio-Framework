@@ -1,5 +1,7 @@
 #include "check.h"
 // NOLINTNEXTLINE(bugprone-suspicious-include)
+#include "../platform/esp32_output/board_output.c"
+// NOLINTNEXTLINE(bugprone-suspicious-include)
 #include "../platform/esp32_lms/src/output.c"
 #include <eaf/eaf_sink_null.h>
 static void wait_done(void) {
