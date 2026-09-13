@@ -292,3 +292,8 @@ STMo/STMu emissions are removed, restoring TCP flow control. Reintroduce S04
 only with a stream buffer large enough that fullness stays well below 100%
 between reports (the WROVER/PSRAM profile) or far more frequent updates, and
 validate on hardware before trusting it.
+
+Hardware confirmation: after reverting the STAT stream fields, the same WROOM
+played 44.1 kHz/16-bit stereo at 176-179 KB/s with zero underruns for the first
+~30 s (rssi -34..-36), versus ~26% intake and ~274 underruns with the fields
+enabled. The attenuation was raised from -18 dB to -10 dB in the same image.
