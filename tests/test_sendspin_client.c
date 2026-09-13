@@ -8,7 +8,8 @@ static eaf_sendspin_client_t client;
 static uint8_t sent_wire[8192];
 static size_t sent_size;
 static uint64_t now = 1000000;
-static unsigned ready_count, start_count, audio_count, end_count, command_count, disconnect_count;
+static unsigned ready_count, start_count, audio_count, end_count, clear_count, command_count,
+    disconnect_count;
 static int64_t audio_timestamp;
 static uint8_t audio_bytes[64];
 static size_t audio_length;
@@ -97,6 +98,11 @@ static void on_end(void *ctx, bool player) {
     CHECK(player);
     ++end_count;
 }
+static void on_clear(void *ctx, bool player) {
+    (void)ctx;
+    CHECK(player);
+    ++clear_count;
+}
 static void on_command(void *ctx, const eaf_sendspin_server_command_t *command) {
     (void)ctx;
     CHECK(command->command == EAF_SENDPIN_COMMAND_VOLUME && command->volume == 7);
@@ -143,6 +149,7 @@ static void script_server(void) {
         "\"sample_rate\":44100,\"channels\":2,\"bit_depth\":16}},\"type\":\"stream/start\"}";
     static const char command[] = "{\"payload\":{\"player\":{\"command\":\"volume\",\"volume\":7}},"
                                   "\"type\":\"server/command\"}";
+    static const char clear[] = "{\"payload\":{\"roles\":[\"player\"]},\"type\":\"stream/clear\"}";
     static const char end[] =
         "{\"payload\":{\"server_transmitted\":1001000,\"roles\":[\"player\"]},"
         "\"type\":\"stream/end\"}";
@@ -161,6 +168,7 @@ static void script_server(void) {
     for (size_t i = 0; i < 16; ++i)
         audio[9 + i] = (uint8_t)(i + 1u);
     offset = append_frame(offset, EAF_SENDPIN_WS_BINARY, audio, sizeof(audio));
+    offset = append_frame(offset, EAF_SENDPIN_WS_TEXT, (const uint8_t *)clear, sizeof(clear) - 1u);
     offset = append_frame(offset, EAF_SENDPIN_WS_TEXT, (const uint8_t *)end, sizeof(end) - 1u);
     server_size = offset;
 }
@@ -244,6 +252,7 @@ int main(void) {
                                           .stream_start = on_start,
                                           .audio = on_audio,
                                           .stream_end = on_end,
+                                          .stream_clear = on_clear,
                                           .command = on_command,
                                           .disconnected = on_disconnect};
     eaf_sendspin_client_init(&client, &config, &callbacks, NULL);
@@ -256,7 +265,7 @@ int main(void) {
         rc = eaf_sendspin_client_step(&client);
     CHECK(rc == 0 || rc == EAF_IO);
     CHECK(ready_count == 1 && start_count == 1 && audio_count == 1 && end_count == 1);
-    CHECK(command_count == 1 && disconnect_count == 0);
+    CHECK(clear_count == 1 && command_count == 1 && disconnect_count == 0);
     CHECK(audio_timestamp == 123456789 && audio_length == 16 && audio_bytes[0] == 1 &&
           audio_bytes[15] == 16);
     CHECK(decoded_contains("\"type\":\"client/hello\""));

@@ -40,8 +40,10 @@ static void on_ready(void *ctx, const eaf_sendspin_server_hello_t *hello) {
     board_log("Sendspin ready: %.*s player=%d\n", (int)hello->name_length, hello->name,
               (int)hello->player_active);
 }
-static void on_stream_start(void *ctx, const eaf_sendspin_stream_start_t *start) {
-    (void)ctx;
+static eaf_sendspin_stream_start_t current_stream;
+static bool have_stream;
+
+static void start_output(const eaf_sendspin_stream_start_t *start) {
     eaf_format_t format = {.sample_rate = start->sample_rate,
                            .num_channels = 2,
                            .channel_mask = EAF_CH_FRONT_LEFT | EAF_CH_FRONT_RIGHT};
@@ -55,6 +57,12 @@ static void on_stream_start(void *ctx, const eaf_sendspin_stream_start_t *start)
         board_log("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
                   start->channels);
 }
+static void on_stream_start(void *ctx, const eaf_sendspin_stream_start_t *start) {
+    (void)ctx;
+    current_stream = *start;
+    have_stream = true;
+    start_output(start);
+}
 static void on_audio(void *ctx, const eaf_sendspin_stream_start_t *format, int64_t timestamp_us,
                      const uint8_t *pcm, size_t length) {
     (void)ctx;
@@ -67,8 +75,18 @@ static void on_audio(void *ctx, const eaf_sendspin_stream_start_t *format, int64
 static void on_stream_end(void *ctx, bool end_player) {
     (void)ctx;
     if (end_player) {
+        have_stream = false;
         eaf_sendspin_player_finish(&player);
         eaf_board_output_finish();
+    }
+}
+static void on_stream_clear(void *ctx, bool clear_player) {
+    (void)ctx;
+    if (clear_player && have_stream) {
+        board_log("Stream clear; flushing buffered audio\n");
+        eaf_sendspin_player_finish(&player);
+        eaf_board_output_stop();
+        start_output(&current_stream);
     }
 }
 static void on_command(void *ctx, const eaf_sendspin_server_command_t *command) {
@@ -169,6 +187,7 @@ int main(void) {
                                           .stream_start = on_stream_start,
                                           .audio = on_audio,
                                           .stream_end = on_stream_end,
+                                          .stream_clear = on_stream_clear,
                                           .command = on_command,
                                           .disconnected = on_disconnect};
     eaf_sendspin_client_init(&client, &config, &callbacks, NULL);
@@ -203,9 +222,12 @@ int main(void) {
             rc = eaf_sendspin_client_step(&client);
             int64_t now = k_uptime_get();
             if (now >= report) {
-                board_log("Sendspin chunks=%u written=%u dropped=%u underruns=%u\n",
+                board_log("Sendspin chunks=%u written=%u dropped=%u underruns=%u sync=%d "
+                          "lat_ms=%lld level=%u flags=%u\n",
                           (unsigned)atomic_get(&chunks), player.frames_written,
-                          player.frames_dropped, eaf_board_output_underruns());
+                          player.frames_dropped, eaf_board_output_underruns(),
+                          (int)player.synchronized, (long long)(player.last_latency_us / 1000),
+                          eaf_board_output_level(), eaf_board_output_flags());
                 report = now + 5000;
             }
             k_sleep(K_MSEC(2));

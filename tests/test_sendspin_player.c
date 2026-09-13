@@ -61,16 +61,21 @@ int main(void) {
     CHECK(recorded[0] == 1000 * 65536 && recorded[1] == -1000 * 65536);
     CHECK(recorded[2] == 2000 * 65536 && recorded[3] == -2000 * 65536);
 
-    /* Scheduled in the past: dropped without conversion. */
+    /* Scheduled in the past: dropped only when hard-sync drop is enabled. */
+    player.drop_late = true;
     int64_t past = eaf_sendspin_compute_server_time(&filter, (int64_t)now - 1000000);
     CHECK(!eaf_sendspin_player_write(&player, past, pcm, sizeof(pcm)));
     CHECK(player.frames_written == 2 && player.frames_dropped == 2 && player.chunks == 2);
     CHECK(recorded_frames == 2);
+    /* With drop disabled the late chunk is still written. */
+    player.drop_late = false;
+    CHECK(!eaf_sendspin_player_write(&player, past, pcm, sizeof(pcm)));
+    CHECK(player.frames_written == 4 && player.frames_dropped == 2 && recorded_frames == 4);
 
     /* Backpressured sink drops the unaccepted remainder. */
     sink_limit = 1;
     CHECK(!eaf_sendspin_player_write(&player, future, pcm, sizeof(pcm)));
-    CHECK(player.frames_written == 3 && player.frames_dropped == 3 && recorded_frames == 3);
+    CHECK(player.frames_written == 5 && player.frames_dropped == 3 && recorded_frames == 5);
     sink_limit = UINT32_MAX;
     eaf_sendspin_player_finish(&player);
     CHECK(!player.active);

@@ -47,7 +47,10 @@ int eaf_sendspin_player_write(eaf_sendspin_player_t *player, int64_t server_time
         uint64_t now = hal_monotonic_time_us();
         int64_t play = eaf_sendspin_compute_client_time(player->filter, server_timestamp_us);
         player->last_latency_us = play - (int64_t)now;
-        if (play + player->drop_ahead_us < (int64_t)now) {
+        /* Hard-sync late drop is opt-in: a jump in the time filter can otherwise
+           starve the reservoir and drop every subsequent chunk. Phase 3 owns
+           scheduling; Phase 2 only reports latency. */
+        if (player->drop_late && play < (int64_t)now) {
             player->frames_dropped += frames;
             player->chunks += 1u;
             return EAF_OK;

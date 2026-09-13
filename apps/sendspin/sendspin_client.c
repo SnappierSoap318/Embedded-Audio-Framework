@@ -184,6 +184,15 @@ static int dispatch_text(eaf_sendspin_client_t *client, const char *json, size_t
             client->callbacks.stream_start(client->callback_ctx, &client->stream);
         return EAF_OK;
     }
+    if (eaf_sendspin_json_string_equals(&type, "stream/clear")) {
+        bool player = true;
+        eaf_sendspin_json_value_t roles;
+        if (!eaf_sendspin_json_get(json, length, "payload.roles", &roles))
+            player = eaf_sendspin_json_array_contains(&roles, "player") != 0;
+        if (client->callbacks.stream_clear)
+            client->callbacks.stream_clear(client->callback_ctx, player);
+        return EAF_OK;
+    }
     if (eaf_sendspin_json_string_equals(&type, "stream/end")) {
         eaf_sendspin_stream_end_t end;
         if (eaf_sendspin_parse_stream_end(json, length, &end))

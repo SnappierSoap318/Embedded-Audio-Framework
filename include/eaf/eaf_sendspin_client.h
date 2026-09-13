@@ -42,6 +42,7 @@ typedef struct {
     void (*audio)(void *ctx, const eaf_sendspin_stream_start_t *format, int64_t timestamp_us,
                   const uint8_t *pcm, size_t length);
     void (*stream_end)(void *ctx, bool player);
+    void (*stream_clear)(void *ctx, bool player);
     void (*group_update)(void *ctx, const eaf_sendspin_group_update_t *group);
     void (*command)(void *ctx, const eaf_sendspin_server_command_t *command);
     void (*disconnected)(void *ctx);

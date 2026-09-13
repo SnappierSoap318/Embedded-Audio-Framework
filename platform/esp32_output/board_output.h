@@ -32,6 +32,7 @@ int eaf_board_output_volume(int32_t left, int32_t right);
 bool eaf_board_output_failed(void);
 bool eaf_board_output_snapshot(eaf_board_playback_t *playback);
 uint32_t eaf_board_output_capacity_frames(void);
+uint32_t eaf_board_output_level(void);
 uint32_t eaf_board_output_underruns(void);
 uint32_t eaf_board_output_queue_min(void);
 uint32_t eaf_board_output_process_calls(void);

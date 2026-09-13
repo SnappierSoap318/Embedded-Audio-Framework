@@ -151,7 +151,14 @@ void eaf_board_output_stop(void) {
     active = false;
 }
 int eaf_board_output_start(const eaf_format_t *format, uint32_t ready_frames, bool held) {
-    if (active || audio.impl || pipeline.state != EAF_UNINITIALIZED)
+    if (active) {
+        /* A finished stream (EOF drained by the worker) is reaped so the next
+           track can start; a genuinely running stream is a state error. */
+        if (!hal_atomic_get(&done))
+            return EAF_STATE;
+        eaf_board_output_stop();
+    }
+    if (audio.impl || pipeline.state != EAF_UNINITIALIZED)
         return EAF_STATE;
     if (!format || !eaf_format_valid(format) || format->num_channels > 2)
         return EAF_UNSUPPORTED;
@@ -268,6 +275,9 @@ bool eaf_board_output_snapshot(eaf_board_playback_t *playback) {
 }
 uint32_t eaf_board_output_capacity_frames(void) {
     return CAPACITY;
+}
+uint32_t eaf_board_output_level(void) {
+    return eaf_reservoir_level(&reservoir);
 }
 uint32_t eaf_board_output_underruns(void) {
     return hal_atomic_get(&underruns);

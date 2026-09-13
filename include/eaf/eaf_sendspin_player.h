@@ -16,8 +16,7 @@ typedef struct {
     void *sink_ctx;
     eaf_format_t format;
     uint8_t input_channels;
-    bool active, synchronized;
-    int64_t drop_ahead_us;
+    bool active, synchronized, drop_late;
     int64_t last_latency_us;
     uint32_t frames_written, frames_dropped, chunks;
 } eaf_sendspin_player_t;
