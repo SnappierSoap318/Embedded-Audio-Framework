@@ -94,6 +94,13 @@ non-player roles, FLAC/`codec_header`, and a spec-current (Noise) server.
 
 ## Phase 1 — Transport and core protocol (portable C, host-testable)
 
+Status: **complete** (2026-09-13). Implemented as `apps/sendspin/sendspin_sync.c`,
+`sendspin_protocol.c`, `sendspin_ws.c`, `sendspin_client.c` with headers
+`include/eaf/eaf_sendspin.h` and `eaf_sendspin_client.h`; host tests
+`test_sendspin_{sync,protocol,ws,client}` and the host harness
+`platform/native_linux/sendspin_probe.c`. Gate met against MA 2.10.3
+(`player@v1` active, clock converged).
+
 - `apps/sendspin/sendspin_ws.c`: WebSocket client over `hal_tcp` — HTTP Upgrade
   handshake, frame encode/decode (FIN/opcode/mask/payload lengths), Ping/Pong,
   Close, fragmentation reassembly.
@@ -211,7 +218,9 @@ Still open:
 
 ## Immediate next actions
 
-1. Phase 0 done and captured: [docs/bench/sendspin-capture-2026-09-13.md](bench/sendspin-capture-2026-09-13.md).
-2. Implement Phase 1 against the captured bytes; run host tests.
-3. Connect the native harness to MA; confirm `player@v1` is active in
-   `server/hello.active_roles` and the clock converges.
+1. Phase 0 and Phase 1 done: [capture](bench/sendspin-capture-2026-09-13.md) and
+   the portable client above.
+2. Phase 2: feed `stream/start` PCM16 into the existing Q1.31 reservoir/graph and
+   reuse the I2S sink on the WROOM boot app (S03).
+3. Optional now: play a track to `EAF Native Probe` and confirm binary Type-4
+   audio dispatch against real MA.

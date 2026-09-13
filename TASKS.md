@@ -128,10 +128,15 @@ encrypted revision is a separate, later target.
   `client/state`, `client/time`/`server/time`, `group/update`, `stream/start`/
   `stream/end`, `client/goodbye`, and the `>Bq` binary Type-4 layout are recorded;
   probe tool at `tools/sendspin_probe.py`.
-- [ ] **S02 — Phase 1 transport and core protocol.** WebSocket client over
+- [x] **S02 — Phase 1 transport and core protocol.** WebSocket client over
   `hal_tcp`, bounded cleartext JSON encode/decode, binary dispatch, time-filter
   port. Test with captured vectors and a simulated server. Gate: native harness
   reaches an active `player@v1` session against real MA with the clock converging.
+  Completed: `apps/sendspin/{sendspin_sync,sendspin_protocol,sendspin_ws,
+  sendspin_client}.c` plus `include/eaf/eaf_sendspin{,_client}.h`; host tests for
+  sync, protocol, WebSocket framing and a scripted-peer client; and
+  `platform/native_linux/sendspin_probe.c`. Gate met against MA 2.10.3
+  (192.168.11.132:8927): `player@v1` active, time filter converged.
 - [ ] **S03 — Phase 2 WROOM PCM proof.** `stream/start` -> PCM16 -> Q1.31 ->
   reservoir/graph/I2S; small buffer; hard sync only. Gate: audible PCM from MA.
 - [ ] **S04 — Phase 3 WROVER/PSRAM sync quality.** PSRAM jitter buffer, drift
