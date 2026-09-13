@@ -125,6 +125,7 @@ int main(void) {
             board_log("LMS connected; select this player's MAC in the server UI");
         int64_t report = 0, diagnostic = 0, previous_diagnostic = k_uptime_get();
         uint64_t previous_bytes = client.diagnostics.http_bytes;
+        bool eof_reported = false;
         while (!rc && online() && !board_output_failed()) {
             eaf_lms_pump_result_t pump;
             rc = eaf_lms_client_pump(&client, 32, 1000, &pump);
@@ -162,6 +163,18 @@ int main(void) {
                 board_output_snapshot(&snapshot)) {
                 rc = eaf_lms_client_report_playback(&client, &snapshot);
                 report = now + 1000;
+            }
+            /* One bounded record of what the server actually sent this stream. */
+            if (!client.input_eof) {
+                eof_reported = false;
+            } else if (!eof_reported) {
+                const eaf_lms_diagnostics_t *d = &client.diagnostics;
+                board_log("HTTP status=%u len=%lu known=%u type=%s bytes=%llu pcm=%llu",
+                          (unsigned)d->http_status, (unsigned long)d->http_content_length,
+                          d->http_length_known ? 1u : 0u,
+                          d->http_content_type[0] ? d->http_content_type : "(none)",
+                          (unsigned long long)d->http_bytes, (unsigned long long)d->pcm_frames);
+                eof_reported = true;
             }
             /* Yield to lower-priority diagnostics even during sustained intake.
                Idle/backpressure polls remain bounded; no fixed delay per recv. */

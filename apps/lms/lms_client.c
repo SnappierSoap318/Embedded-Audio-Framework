@@ -245,6 +245,9 @@ static int headers(eaf_lms_client_t *c) {
     if (c->header_used < 12 ||
         (memcmp(p, "HTTP/1.0 200 ", 13) != 0 && memcmp(p, "HTTP/1.1 200 ", 13) != 0))
         return EAF_IO;
+    c->diagnostics.http_status =
+        (uint16_t)(((unsigned)(p[9] - '0') * 100u) + ((unsigned)(p[10] - '0') * 10u) +
+                   (unsigned)(p[11] - '0'));
     p = strstr(p, "\r\n");
     if (!p)
         return EAF_INVALID;
@@ -257,6 +260,16 @@ static int headers(eaf_lms_client_t *c) {
         if (key(p, len, "transfer-encoding:") || key(p, len, "content-encoding:") ||
             key(p, len, "icy-metaint:"))
             return EAF_UNSUPPORTED;
+        if (key(p, len, "content-type:")) {
+            const char *v = p + 13;
+            while (v < end && (*v == ' ' || *v == '\t'))
+                ++v;
+            size_t n = (size_t)(end - v);
+            if (n >= sizeof(c->diagnostics.http_content_type))
+                n = sizeof(c->diagnostics.http_content_type) - 1u;
+            memcpy(c->diagnostics.http_content_type, v, n);
+            c->diagnostics.http_content_type[n] = '\0';
+        }
         if (key(p, len, "content-length:")) {
             if (c->has_length)
                 return EAF_INVALID;
@@ -278,6 +291,8 @@ static int headers(eaf_lms_client_t *c) {
                 return EAF_INVALID;
             c->remaining = value;
             c->has_length = true;
+            c->diagnostics.http_length_known = true;
+            c->diagnostics.http_content_length = value > UINT32_MAX ? UINT32_MAX : (uint32_t)value;
         }
         p = end + 2;
     }

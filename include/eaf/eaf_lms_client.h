@@ -73,6 +73,11 @@ typedef struct {
     int first_error;
     eaf_lms_stage_t error_stage;
     uint8_t error_opcode[4];
+    /* Latest stream response metadata, for framing diagnosis. */
+    uint16_t http_status;
+    bool http_length_known;
+    uint32_t http_content_length;
+    char http_content_type[32];
 } eaf_lms_diagnostics_t;
 typedef struct {
     uint32_t steps;
