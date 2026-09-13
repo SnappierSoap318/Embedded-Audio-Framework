@@ -266,10 +266,15 @@ remains the way to ride out multi-second network stalls.
 ## PSRAM reservoir and board capability split — 2026-09-13
 
 The output reservoir capacity is now `CONFIG_EAF_BOARD_RESERVOIR_FRAMES` (power of
-two) instead of a hardcoded 4096, and `CONFIG_EAF_BOARD_USE_PSRAM` allocates its
-storage from the ESP32 external-RAM shared heap (`shared_multi_heap_alloc`,
-`SMH_REG_ATTR_EXTERNAL`) during `board_output_init`, before START. The portable
-reservoir already takes caller-owned storage, so no core change was needed.
+two) instead of a hardcoded 4096. Storage placement is selected at build time:
+the app CMakeLists adds `platform/esp32_output/storage_internal.c` or
+`storage_psram.c` (ESP32 external-RAM shared heap via `shared_multi_heap_alloc`,
+`SMH_REG_ATTR_EXTERNAL`), and the app passes the resulting `storage` /
+`capacity_frames` through `eaf_board_output_config_t`. `board_output.c` is now free
+of feature `#if` branches. The portable reservoir already took caller-owned storage,
+so no core change was needed. The Sendspin app likewise takes
+`CONFIG_EAF_SOURCE_CHANNELS` / `CONFIG_EAF_BYTES_PER_FRAME` as Kconfig values rather
+than a `CONFIG_EAF_BOARD_MONO` preprocessor branch.
 
 Two profiles build from the same app: WROOM (internal RAM, 4096 frames) and
 WROVER-E/N16R8 (`psram.conf` + `psram.overlay`, 8 MB PSRAM, 65536-frame reservoir

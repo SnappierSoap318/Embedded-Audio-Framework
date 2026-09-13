@@ -1,17 +1,21 @@
 #include "output.h"
 #include "diagnostics.h"
 
-#ifndef CONFIG_EAF_BOARD_AUDIO_CPU
-#define CONFIG_EAF_BOARD_AUDIO_CPU -1
-#endif
-
 /* Adapts the LMS client callbacks to the protocol-agnostic output owner. */
 static void lms_log(const char *message) {
     board_log("%s", message);
 }
 
 int board_output_init(void) {
-    eaf_board_output_config_t config = {.audio_cpu = CONFIG_EAF_BOARD_AUDIO_CPU, .log = lms_log};
+    int32_t *storage_store;
+    uint32_t storage_frames;
+    int rc = eaf_board_output_storage(&storage_store, &storage_frames);
+    if (rc)
+        return rc;
+    eaf_board_output_config_t config = {.audio_cpu = CONFIG_EAF_BOARD_AUDIO_CPU,
+                                        .log = lms_log,
+                                        .storage = storage_store,
+                                        .capacity_frames = storage_frames};
     return eaf_board_output_init(&config);
 }
 

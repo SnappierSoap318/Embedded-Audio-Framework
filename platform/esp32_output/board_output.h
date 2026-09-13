@@ -10,6 +10,8 @@ typedef void (*eaf_board_log_fn)(const char *message);
 typedef struct {
     int audio_cpu; /* -1 unrestricted; otherwise an OS CPU index. */
     eaf_board_log_fn log;
+    int32_t *storage;
+    uint32_t capacity_frames;
 } eaf_board_output_config_t;
 
 typedef struct {
@@ -19,6 +21,8 @@ typedef struct {
 } eaf_board_playback_t;
 
 int eaf_board_output_init(const eaf_board_output_config_t *config);
+/* Selected storage provider fills the reservoir backing store. */
+int eaf_board_output_storage(int32_t **storage, uint32_t *frames);
 /* Format is the source format (1..2 channels). ready_frames is the reservoir
    prefill required before release; held keeps the audio worker gated. */
 int eaf_board_output_start(const eaf_format_t *format, uint32_t ready_frames, bool held);

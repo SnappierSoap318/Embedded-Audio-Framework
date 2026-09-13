@@ -43,6 +43,8 @@ static void on_ready(void *ctx, const eaf_sendspin_server_hello_t *hello) {
 static eaf_sendspin_stream_start_t current_stream;
 static bool have_stream;
 
+static void apply_volume(void);
+
 static void start_output(const eaf_sendspin_stream_start_t *start) {
     eaf_format_t format = {.sample_rate = start->sample_rate,
                            .num_channels = 2,
@@ -51,11 +53,13 @@ static void start_output(const eaf_sendspin_stream_start_t *start) {
     int rc = eaf_board_output_start(&format, capacity * 3u / 4u, false);
     if (!rc)
         rc = eaf_sendspin_player_begin(&player, &client.filter, start);
-    if (rc)
+    if (rc) {
         board_log("Stream start failed rc=%d\n", rc);
-    else
+    } else {
+        apply_volume();
         board_log("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
                   start->channels);
+    }
 }
 static void on_stream_start(void *ctx, const eaf_sendspin_stream_start_t *start) {
     (void)ctx;
@@ -89,9 +93,33 @@ static void on_stream_clear(void *ctx, bool clear_player) {
         start_output(&current_stream);
     }
 }
+static int32_t volume_level = 100;
+static bool volume_muted;
+
+/* Perceptual square-law mapping from the server's 0..100 to Q1.31 gain. */
+static int32_t volume_to_gain(int32_t percent) {
+    if (percent <= 0)
+        return 0;
+    if (percent >= 100)
+        return INT32_MAX;
+    int64_t value = percent;
+    return (int32_t)(value * value * INT32_MAX / 10000);
+}
+static void apply_volume(void) {
+    int32_t gain = volume_muted ? 0 : volume_to_gain(volume_level);
+    (void)eaf_board_output_volume(gain, gain);
+}
 static void on_command(void *ctx, const eaf_sendspin_server_command_t *command) {
     (void)ctx;
-    (void)command;
+    if (command->command == EAF_SENDPIN_COMMAND_VOLUME && command->volume >= 0) {
+        volume_level = command->volume;
+        board_log("Volume=%d\n", volume_level);
+        apply_volume();
+    } else if (command->command == EAF_SENDPIN_COMMAND_MUTE) {
+        volume_muted = command->muted;
+        board_log("Mute=%d\n", (int)volume_muted);
+        apply_volume();
+    }
 }
 static void on_disconnect(void *ctx) {
     (void)ctx;
@@ -163,8 +191,16 @@ int main(void) {
     if (net_addr_pton(AF_INET, CONFIG_EAF_BOARD_SERVER, &server))
         return 1;
 
+    int32_t *storage;
+    uint32_t frames;
+    if (eaf_board_output_storage(&storage, &frames)) {
+        board_log("Output storage allocation failed\n");
+        return 1;
+    }
     eaf_board_output_config_t output_config = {.audio_cpu = CONFIG_EAF_BOARD_AUDIO_CPU,
-                                               .log = sendspin_output_log};
+                                               .log = sendspin_output_log,
+                                               .storage = storage,
+                                               .capacity_frames = frames};
     if (eaf_board_output_init(&output_config)) {
         board_log("Output initialization failed\n");
         return 1;
@@ -173,28 +209,21 @@ int main(void) {
 
     uint32_t capacity = eaf_board_output_capacity_frames();
     uint32_t capacity_ms = capacity * 1000u / 48000u;
-#if defined(CONFIG_EAF_BOARD_MONO)
-    const uint8_t source_channels = 1;
-    const uint32_t bytes_per_frame = 2;
-#else
-    const uint8_t source_channels = 2;
-    const uint32_t bytes_per_frame = 4;
-#endif
     eaf_sendspin_config_t config = {.client_id = "eaf-sendspin-wroom",
                                     .name = "EAF Sendspin WROOM",
                                     .product_name = "EAF Sendspin WROOM",
                                     .manufacturer = "EAF",
                                     .software_version = "phase2",
                                     .sample_rate = 44100,
-                                    .channels = source_channels,
                                     .bit_depth = 16,
-                                    .buffer_capacity = capacity * bytes_per_frame,
                                     .support_volume = true,
                                     .support_mute = true,
                                     .volume = 100,
                                     .static_delay_ms = 0,
                                     .required_lead_time_ms = (int32_t)capacity_ms,
                                     .min_buffer_ms = (int32_t)capacity_ms};
+    config.channels = CONFIG_EAF_SOURCE_CHANNELS;
+    config.buffer_capacity = capacity * CONFIG_EAF_BYTES_PER_FRAME;
     eaf_sendspin_callbacks_t callbacks = {.ready = on_ready,
                                           .stream_start = on_stream_start,
                                           .audio = on_audio,
@@ -246,12 +275,12 @@ int main(void) {
                 uint64_t span = (uint64_t)(now - previous_ms);
                 uint64_t rate = span ? (client.rx_total - previous_rx) * 1000u / span : 0;
                 board_log("Sendspin chunks=%u written=%u dropped=%u underruns=%u sync=%d "
-                          "lat_ms=%lld level=%u flags=%u rx=%llu B/s\n",
+                          "lat_ms=%lld level=%u flags=%u rx=%llu B/s vol=%d mute=%d\n",
                           (unsigned)atomic_get(&chunks), player.frames_written,
                           player.frames_dropped, eaf_board_output_underruns(),
                           (int)player.synchronized, (long long)(player.last_latency_us / 1000),
                           eaf_board_output_level(), eaf_board_output_flags(),
-                          (unsigned long long)rate);
+                          (unsigned long long)rate, volume_level, (int)volume_muted);
                 wifi_health();
                 previous_rx = client.rx_total;
                 previous_ms = now;

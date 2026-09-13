@@ -31,6 +31,10 @@ WROVER PSRAM profile add `-DEXTRA_CONF_FILE=psram.conf` and
 65536-frame (~1.5 s) reservoir to the external heap; the WROOM profile keeps the
 4096-frame (~93 ms) reservoir in internal RAM.
 
+The WROOM board config advertises mono PCM (`CONFIG_EAF_SOURCE_CHANNELS=1`,
+`CONFIG_EAF_BYTES_PER_FRAME=2`) to halve the network bitrate; the PSRAM profile
+advertises stereo. The board always expands the source to stereo for the sink.
+
 ## Behaviour
 
 - Wi-Fi + DHCP, then `eaf_sendspin_client` connects to the configured server.

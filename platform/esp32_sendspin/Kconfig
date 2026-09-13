@@ -14,14 +14,20 @@ config EAF_BOARD_PORT
     int "Sendspin server port"
     default 8927
     range 1 65535
-config EAF_BOARD_MONO
-    bool "Advertise mono PCM to the server (halves the bitrate)"
-    default n
+config EAF_SOURCE_CHANNELS
+    int "Source PCM channels advertised to the server"
+    default 2
+    range 1 2
     help
-      Ask Music Assistant to send one channel. The board still outputs stereo
-      (the producer duplicates the channel), but the network rate drops from
-      ~176 kB/s to ~88 kB/s, which is more reliable on throughput-limited
+      Ask Music Assistant to send this many channels. The board still outputs
+      stereo (the producer duplicates one channel when mono), but the network
+      rate drops when set to 1, which is more reliable on throughput-limited
       2.4 GHz Wi-Fi.
+
+config EAF_BYTES_PER_FRAME
+    int "Source bytes per frame (channels * sample size)"
+    default 2 if EAF_SOURCE_CHANNELS = 1
+    default 4
 config EAF_BOARD_WIFI_PS_NONE
     bool "Disable Wi-Fi modem sleep for lower latency"
     default y

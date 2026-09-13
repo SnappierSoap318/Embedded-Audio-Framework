@@ -91,9 +91,12 @@ if(BUILD_TESTING)
       -Wl,--wrap=hal_tcp_close -Wl,--wrap=hal_monotonic_time_us -Wl,--wrap=hal_tcp_connect)
     add_test(NAME lms_pump COMMAND test_lms_pump)
     set_tests_properties(lms_pump PROPERTIES TIMEOUT 15)
-    add_executable(test_board_output tests/test_board_output.c platform/esp32_output/sink_null.c platform/esp32_common/log_buffer.c)
+    add_executable(test_board_output tests/test_board_output.c platform/esp32_output/sink_null.c
+      platform/esp32_output/storage_internal.c platform/esp32_common/log_buffer.c)
     target_link_libraries(test_board_output PRIVATE eaf)
     target_include_directories(test_board_output PRIVATE platform/esp32_output platform/esp32_common)
+    target_compile_definitions(test_board_output PRIVATE CONFIG_EAF_BOARD_RESERVOIR_FRAMES=4096
+      "CONFIG_EAF_BOARD_AUDIO_CPU=(-1)")
     add_test(NAME board_output COMMAND test_board_output)
     set_tests_properties(board_output PROPERTIES TIMEOUT 15)
     add_executable(test_lms_startup tests/test_lms_startup.c)

@@ -3,24 +3,12 @@
 #include <eaf/eaf_dsp.h>
 #include <stdarg.h>
 #include <stdio.h>
-#if defined(CONFIG_EAF_BOARD_USE_PSRAM)
-#include <zephyr/multi_heap/shared_multi_heap.h>
-#endif
-#ifndef CONFIG_EAF_BOARD_RESERVOIR_FRAMES
-#define CONFIG_EAF_BOARD_RESERVOIR_FRAMES 4096
-#endif
-#define CAPACITY ((uint32_t)CONFIG_EAF_BOARD_RESERVOIR_FRAMES)
-_Static_assert((CONFIG_EAF_BOARD_RESERVOIR_FRAMES & (CONFIG_EAF_BOARD_RESERVOIR_FRAMES - 1)) == 0,
-               "EAF_BOARD_RESERVOIR_FRAMES must be a power of two");
 static eaf_board_log_fn log_sink;
 static int audio_cpu = -1;
 static eaf_reservoir_t reservoir;
 static eaf_pipeline_t pipeline;
-#if defined(CONFIG_EAF_BOARD_USE_PSRAM)
 static int32_t *storage;
-#else
-static int32_t storage[CAPACITY * 2u];
-#endif
+static uint32_t capacity;
 static eaf_sink_t *sink;
 static uint8_t input_channels;
 static eaf_volume_ctx_t volume = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};
@@ -162,13 +150,13 @@ int eaf_board_output_start(const eaf_format_t *format, uint32_t ready_frames, bo
         return EAF_STATE;
     if (!format || !eaf_format_valid(format) || format->num_channels > 2)
         return EAF_UNSUPPORTED;
-    if (!ready_frames || ready_frames > CAPACITY)
-        ready_frames = CAPACITY * 3u / 4u;
+    if (!ready_frames || ready_frames > capacity)
+        ready_frames = capacity * 3u / 4u;
     output_log("Output request: %u Hz channels=%u", format->sample_rate,
                (unsigned)format->num_channels);
     input_channels = format->num_channels;
     eaf_pipeline_config_t config = {&reservoir, nodes, 2, sink};
-    int rc = eaf_reservoir_init(&reservoir, storage, CAPACITY,
+    int rc = eaf_reservoir_init(&reservoir, storage, capacity,
                                 (eaf_format_t){format->sample_rate, 2, 3}, ready_frames);
     if (!rc)
         rc = eaf_pipeline_init(&pipeline, &config);
@@ -242,15 +230,13 @@ void eaf_board_output_finish(void) {
 int eaf_board_output_init(const eaf_board_output_config_t *config) {
     if (!config)
         return EAF_INVALID;
+    if (!config->storage || config->capacity_frames < 2u ||
+        (config->capacity_frames & (config->capacity_frames - 1u)))
+        return EAF_INVALID;
+    storage = config->storage;
+    capacity = config->capacity_frames;
     log_sink = config->log;
     audio_cpu = config->audio_cpu;
-#if defined(CONFIG_EAF_BOARD_USE_PSRAM)
-    storage = shared_multi_heap_alloc(SMH_REG_ATTR_EXTERNAL, sizeof(int32_t) * CAPACITY * 2u);
-    if (!storage) {
-        output_log("PSRAM reservoir allocation failed (%u frames)", CAPACITY);
-        return EAF_IO;
-    }
-#endif
     sink = board_sink();
     return board_sink_init();
 }
@@ -269,12 +255,12 @@ bool eaf_board_output_snapshot(eaf_board_playback_t *playback) {
     if (!active)
         return false;
     *playback =
-        (eaf_board_playback_t){hal_atomic_get(&elapsed), CAPACITY * 8u,
+        (eaf_board_playback_t){hal_atomic_get(&elapsed), capacity * 8u,
                                eaf_reservoir_level(&reservoir) * 8u, hal_atomic_get(&played) != 0};
     return true;
 }
 uint32_t eaf_board_output_capacity_frames(void) {
-    return CAPACITY;
+    return capacity;
 }
 uint32_t eaf_board_output_level(void) {
     return eaf_reservoir_level(&reservoir);
