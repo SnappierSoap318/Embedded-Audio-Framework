@@ -173,3 +173,52 @@ int eaf_sendspin_build_client_state(char *dst, size_t capacity,
                                     const eaf_sendspin_client_state_t *state, size_t *written);
 int eaf_sendspin_build_client_goodbye(char *dst, size_t capacity, const char *reason,
                                       size_t *written);
+
+/* --- WebSocket (RFC 6455) -------------------------------------------------- */
+
+#define EAF_SENDPIN_WS_TEXT 0x1u
+#define EAF_SENDPIN_WS_BINARY 0x2u
+#define EAF_SENDPIN_WS_CLOSE 0x8u
+#define EAF_SENDPIN_WS_PING 0x9u
+#define EAF_SENDPIN_WS_PONG 0xAu
+#define EAF_SENDPIN_WS_HEADER_MAX 14u
+
+/* Deterministic xorshift generator for the client key and frame masks. */
+typedef struct {
+    uint32_t state;
+} eaf_sendspin_ws_prng_t;
+
+void eaf_sendspin_ws_prng_init(eaf_sendspin_ws_prng_t *prng, uint32_t seed);
+uint32_t eaf_sendspin_ws_prng_next(eaf_sendspin_ws_prng_t *prng);
+/* Fills 24 base64 characters + NUL from 16 random bytes. */
+void eaf_sendspin_ws_client_key(eaf_sendspin_ws_prng_t *prng, char out[25]);
+
+int eaf_sendspin_ws_build_upgrade(char *dst, size_t capacity, const char *host, const char *path,
+                                  const char *key, size_t *written);
+int eaf_sendspin_ws_check_upgrade_response(const char *response, size_t length);
+/* Encode one masked client frame (FIN always set). */
+int eaf_sendspin_ws_encode(uint8_t *dst, size_t capacity, uint8_t opcode, const uint8_t *payload,
+                           size_t length, uint32_t mask_key, size_t *written);
+
+typedef int (*eaf_sendspin_ws_message_fn)(void *ctx, uint8_t opcode, const uint8_t *payload,
+                                          size_t length);
+
+typedef struct {
+    uint8_t header[EAF_SENDPIN_WS_HEADER_MAX];
+    size_t header_used, header_needed;
+    uint64_t payload_length, payload_used;
+    uint8_t mask[4];
+    uint8_t opcode;
+    bool fin, masked, frame_ready;
+    uint8_t *message;
+    size_t message_capacity, message_length;
+    uint8_t message_opcode;
+    bool fragmenting;
+    uint8_t control[125];
+    size_t control_length;
+} eaf_sendspin_ws_rx_t;
+
+void eaf_sendspin_ws_rx_init(eaf_sendspin_ws_rx_t *rx, uint8_t *message, size_t capacity);
+/* Streaming decoder; dispatches complete messages and control frames. */
+int eaf_sendspin_ws_rx_feed(eaf_sendspin_ws_rx_t *rx, const uint8_t *data, size_t length,
+                            eaf_sendspin_ws_message_fn callback, void *ctx);
