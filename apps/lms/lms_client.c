@@ -1,5 +1,15 @@
+#include <eaf/eaf_hal.h>
 #include <eaf/eaf_lms_client.h>
 #include <string.h>
+static void record_error(eaf_lms_client_t *c, int rc) {
+    if (rc && !c->diagnostics.first_error) {
+        c->diagnostics.first_error = rc;
+        c->diagnostics.error_stage = c->stage;
+        if (c->stage == EAF_LMS_STAGE_COMMAND || c->stage == EAF_LMS_STAGE_HTTP_CONNECT ||
+            c->stage == EAF_LMS_STAGE_OUTPUT_START)
+            memcpy(c->diagnostics.error_opcode, c->opcode, 4);
+    }
+}
 static void put32(uint8_t *p, uint32_t n) {
     for (unsigned i = 0; i < 4; ++i)
         p[i] = (uint8_t)(n >> ((3u - i) * 8u));
@@ -49,6 +59,8 @@ static void stop_stream(eaf_lms_client_t *c) {
 }
 static int command(void *ctx, const uint8_t *p, size_t n) {
     eaf_lms_client_t *c = ctx;
+    c->stage = EAF_LMS_STAGE_COMMAND;
+    memcpy(c->opcode, p, 4);
     if (memcmp(p, "audg", 4) == 0) {
         if (n < 22u)
             return EAF_INVALID;
@@ -130,9 +142,11 @@ static int command(void *ctx, const uint8_t *p, size_t n) {
     c->big_endian = s.endianness == '0';
     c->format = (eaf_format_t){rates[s.sample_rate - '0'], (uint8_t)(s.channels - '0'),
                                s.channels == '1' ? 8u : 3u};
+    c->stage = EAF_LMS_STAGE_HTTP_CONNECT;
     rc = hal_tcp_connect(&c->http, s.server_ipv4 ? s.server_ipv4 : c->server, s.server_port, 500);
     if (rc)
         return rc;
+    c->stage = EAF_LMS_STAGE_OUTPUT_START;
     rc = c->callbacks.start(c->callbacks.ctx, &c->format);
     if (rc) {
         hal_tcp_close(&c->http);
@@ -162,9 +176,13 @@ int eaf_lms_client_connect(eaf_lms_client_t *c, uint32_t server, uint16_t port,
                            const uint8_t mac[6]) {
     if (!c || !mac || !c->callbacks.start || c->control.open)
         return EAF_INVALID;
+    c->diagnostics = (eaf_lms_diagnostics_t){0};
+    c->stage = EAF_LMS_STAGE_CONNECT;
     int rc = hal_tcp_connect(&c->control, server, port, 500);
-    if (rc)
+    if (rc) {
+        record_error(c, rc);
         return rc;
+    }
     c->server = server;
     c->tx_sent = 0;
     eaf_lms_parser_init(&c->parser, command, c);
@@ -228,6 +246,7 @@ static int headers(eaf_lms_client_t *c) {
         p = end + 2;
     }
     c->headers_done = true;
+    c->step_progress = true;
     if (c->has_length && !c->remaining)
         c->body_done = true;
     return enqueue(c, "RESP", c->header, c->header_used);
@@ -278,16 +297,24 @@ static int pump_http(eaf_lms_client_t *c) {
             if (rc)
                 return rc;
             c->ready_sent = true;
+            c->step_progress = true;
         }
         return EAF_OK;
     }
     if (c->pcm_sent < c->pcm_count) {
         uint32_t left = c->pcm_count - c->pcm_sent;
+        c->stage = EAF_LMS_STAGE_PCM;
         uint32_t wrote = c->callbacks.pcm(
             c->callbacks.ctx, c->pcm + (size_t)c->pcm_sent * c->format.num_channels, left);
         if (wrote > left)
             return EAF_INVALID;
         c->pcm_sent += wrote;
+        c->diagnostics.pcm_frames += wrote;
+        c->step_progress |= wrote != 0;
+        if (wrote < left) {
+            ++c->diagnostics.backpressure;
+            c->step_backpressure = true;
+        }
         if (c->pcm_sent < c->pcm_count)
             return EAF_OK;
     }
@@ -296,12 +323,14 @@ static int pump_http(eaf_lms_client_t *c) {
     if (c->body_done) {
         if (c->tail_used)
             return EAF_INVALID;
+        c->step_progress = true;
         c->callbacks.eof(c->callbacks.ctx);
         hal_tcp_close(&c->http);
         return status(c, "STMd", 0);
     }
     size_t n = 0;
     if (c->request_sent < c->request_used) {
+        c->stage = EAF_LMS_STAGE_HTTP_SEND;
         int rc = hal_tcp_send(&c->http, c->request + c->request_sent,
                               c->request_used - c->request_sent, &n);
         if (rc == EAF_AGAIN)
@@ -309,19 +338,27 @@ static int pump_http(eaf_lms_client_t *c) {
         if (rc)
             return rc;
         c->request_sent += n;
+        c->step_progress |= n != 0;
         return EAF_OK;
     }
+    c->stage = EAF_LMS_STAGE_HTTP_RECV;
     int rc = hal_tcp_recv(&c->http, c->rx, sizeof(c->rx), &n);
-    if (rc == EAF_AGAIN)
+    if (rc == EAF_AGAIN) {
+        ++c->diagnostics.recv_again;
         return EAF_OK;
+    }
     if (rc == EAF_EOF) {
         if (!c->headers_done || (c->has_length && c->remaining) || c->tail_used)
             return EAF_IO;
         c->body_done = true;
+        c->step_progress = true;
         return EAF_OK;
     }
     if (rc)
         return rc;
+    c->diagnostics.http_bytes += n;
+    c->step_progress |= n != 0;
+    c->stage = EAF_LMS_STAGE_HEADERS;
     size_t i = 0;
     while (i < n && !c->headers_done) {
         if (c->header_used == EAF_LMS_MAX_PACKET)
@@ -337,33 +374,64 @@ static int pump_http(eaf_lms_client_t *c) {
                 return rc;
         }
     }
+    c->stage = EAF_LMS_STAGE_DECODE;
     return decode(c, c->rx + i, n - i);
 }
 int eaf_lms_client_step(eaf_lms_client_t *c) {
     if (!c || !c->control.open)
         return EAF_STATE;
+    c->step_progress = false;
+    c->step_backpressure = false;
     size_t n = 0;
     int rc = 0;
     if (c->tx_sent < c->tx_used) {
+        c->stage = EAF_LMS_STAGE_CONTROL_SEND;
         rc = hal_tcp_send(&c->control, c->tx + c->tx_sent, c->tx_used - c->tx_sent, &n);
         if (rc == EAF_AGAIN)
             rc = 0;
-        if (!rc)
+        if (!rc) {
             c->tx_sent += n;
+            c->step_progress |= n != 0;
+        }
     }
     uint8_t incoming[256];
     if (!rc) {
+        c->stage = EAF_LMS_STAGE_CONTROL_RECV;
         rc = hal_tcp_recv(&c->control, incoming, sizeof(incoming), &n);
         if (rc == EAF_AGAIN)
             rc = 0;
-        else if (!rc)
+        else if (!rc) {
+            c->step_progress |= n != 0;
             rc = eaf_lms_feed(&c->parser, incoming, n);
+        }
     }
     if (!rc)
         rc = pump_http(c);
-    if (rc)
+    if (rc) {
+        record_error(c, rc);
         eaf_lms_client_close(c);
+    }
     return rc;
+}
+int eaf_lms_client_pump(eaf_lms_client_t *c, uint32_t max_steps, uint32_t max_us,
+                        eaf_lms_pump_result_t *result) {
+    if (!c || !result || !max_steps || max_steps > 64 || !max_us || max_us > 10000)
+        return EAF_INVALID;
+    *result = (eaf_lms_pump_result_t){0};
+    uint64_t begin = hal_monotonic_time_us();
+    for (;;) {
+        int rc = eaf_lms_client_step(c);
+        ++result->steps;
+        result->progressed |= c->step_progress;
+        result->backpressured |= c->step_backpressure;
+        if (rc || !c->step_progress)
+            return rc;
+        if (result->steps >= max_steps || hal_monotonic_time_us() - begin >= max_us) {
+            result->budget_exhausted = true;
+            ++c->diagnostics.budget_yields;
+            return EAF_OK;
+        }
+    }
 }
 void eaf_lms_client_close(eaf_lms_client_t *c) {
     if (!c)
@@ -382,7 +450,9 @@ int eaf_lms_client_report_playback(eaf_lms_client_t *c, const eaf_lms_playback_t
         return EAF_STATE;
     c->playback = *p;
     bool first = p->started && !c->started_sent;
+    c->stage = EAF_LMS_STAGE_STATUS;
     int rc = status(c, first ? "STMs" : "STMt", 0);
+    record_error(c, rc);
     if (!rc && first)
         c->started_sent = true;
     return rc;

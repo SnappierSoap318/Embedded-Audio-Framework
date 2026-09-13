@@ -40,7 +40,7 @@ static void apply_volume(void) {
 static eaf_thread_t audio;
 static eaf_atomic_u32_t quit, elapsed, played, failed, pause_request, pause_ack, done, run_gate;
 static bool active;
-static eaf_atomic_u32_t underruns;
+static eaf_atomic_u32_t underruns, queue_min;
 static void consume(void *ctx) {
     (void)ctx;
     /* No graph access until START has reset the reservoir and enabled output. */
@@ -71,6 +71,11 @@ static void consume(void *ctx) {
         }
         hal_atomic_set(&underruns, reservoir.underruns);
         uint64_t presented = reservoir.frames_read;
+        if (presented && rc != EAF_EOF) {
+            uint32_t level = eaf_reservoir_level(&reservoir);
+            if (level < hal_atomic_get(&queue_min))
+                hal_atomic_set(&queue_min, level);
+        }
         /* Submitted frames, not a speaker presentation timestamp. */
         hal_atomic_set(&elapsed, (uint32_t)(presented * 1000u / reservoir.format.sample_rate));
         if (presented)
@@ -141,6 +146,7 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     hal_atomic_set(&run_gate, 0);
     hal_atomic_set(&elapsed, 0);
     hal_atomic_set(&underruns, 0);
+    hal_atomic_set(&queue_min, UINT32_MAX);
     hal_atomic_set(&played, 0);
     hal_atomic_set(&failed, 0);
     hal_atomic_set(&pause_request, 0);
@@ -210,4 +216,9 @@ bool board_output_snapshot(eaf_lms_playback_t *snapshot) {
 
 uint32_t board_output_underruns(void) {
     return hal_atomic_get(&underruns);
+}
+
+uint32_t board_output_queue_min(void) {
+    uint32_t level = hal_atomic_get(&queue_min);
+    return level == UINT32_MAX ? 0 : level;
 }

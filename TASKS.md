@@ -88,6 +88,8 @@ attempting synchronized playback; the underlying T tasks below remain open.
 - [ ] **R1 — Intake and evidence:** bounded progress-driven receive pumping,
   first-failure attribution, throughput and queue-minimum counters. Cover accepted
   PCM rates/widths, full-buffer backpressure and bounded control latency (T04/T07/T12).
+  Software pump/counters and deterministic regression are implemented; physical
+  controlled-stream throughput and long-play qualification remain pending.
 - [ ] **R2 — Buffer readiness:** parse stream/output thresholds, define feasible
   WROOM start/rebuffer policy and short-EOF behavior. Add compact ingress storage
   only if measured jitter/memory accounting justifies it (T06/T07/T11).

@@ -23,6 +23,33 @@ typedef struct {
     /* True only after the output owner observes actual track playback. */
     bool started;
 } eaf_lms_playback_t;
+typedef enum {
+    EAF_LMS_STAGE_NONE,
+    EAF_LMS_STAGE_CONNECT,
+    EAF_LMS_STAGE_CONTROL_SEND,
+    EAF_LMS_STAGE_CONTROL_RECV,
+    EAF_LMS_STAGE_COMMAND,
+    EAF_LMS_STAGE_HTTP_CONNECT,
+    EAF_LMS_STAGE_OUTPUT_START,
+    EAF_LMS_STAGE_HTTP_SEND,
+    EAF_LMS_STAGE_HTTP_RECV,
+    EAF_LMS_STAGE_HEADERS,
+    EAF_LMS_STAGE_DECODE,
+    EAF_LMS_STAGE_PCM,
+    EAF_LMS_STAGE_STATUS
+} eaf_lms_stage_t;
+typedef struct {
+    /* Session totals survive track changes and close; reset on connect attempt. */
+    uint64_t http_bytes, pcm_frames;
+    uint32_t recv_again, backpressure, budget_yields;
+    int first_error;
+    eaf_lms_stage_t error_stage;
+    uint8_t error_opcode[4];
+} eaf_lms_diagnostics_t;
+typedef struct {
+    uint32_t steps;
+    bool progressed, budget_exhausted, backpressured;
+} eaf_lms_pump_result_t;
 typedef struct {
     eaf_tcp_t control, http;
     eaf_lms_parser_t parser;
@@ -39,6 +66,10 @@ typedef struct {
     bool wait_cont, wait_start, ready_sent, started_sent;
     eaf_lms_playback_t playback;
     uint64_t remaining, bytes_received;
+    eaf_lms_diagnostics_t diagnostics;
+    eaf_lms_stage_t stage;
+    uint8_t opcode[4];
+    bool step_progress, step_backpressure;
 } eaf_lms_client_t;
 int eaf_lms_client_init(eaf_lms_client_t *c, const eaf_lms_callbacks_t *callbacks);
 int eaf_lms_client_connect(eaf_lms_client_t *c, uint32_t server, uint16_t port,
@@ -47,6 +78,12 @@ int eaf_lms_client_connect(eaf_lms_client_t *c, uint32_t server, uint16_t port,
    Raw PCM only; caller repeats in transport worker and explicitly reconnects
    after errors. The audio task remains independent while backpressured. */
 int eaf_lms_client_step(eaf_lms_client_t *c);
+/* Progress-driven batch: at most 64 steps, with a checked time budget (1..10000 us).
+   Services control before HTTP each step; stops on no progress. max_us bounds
+   admission of another step, not the synchronous connect/start/pause callbacks.
+   On budget exhaustion yield briefly; on idle/backpressure wait before retrying. */
+int eaf_lms_client_pump(eaf_lms_client_t *c, uint32_t max_steps, uint32_t max_us,
+                        eaf_lms_pump_result_t *result);
 /* Transport-thread only: pass a coherently transferred output-owner snapshot.
    Sends STMs once per stream on started, then STMt on subsequent reports.
    Network receipt/PCM acceptance alone must not be reported as playback. */

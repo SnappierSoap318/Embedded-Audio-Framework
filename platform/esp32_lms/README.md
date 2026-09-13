@@ -132,3 +132,13 @@ used by synchronized playback currently return EAF_UNSUPPORTED and terminate the
 LMS session. Timed starts, clock correction and proper sync status remain pending.
 The fixed 1/8 gain stage still reduces maximum LMS volume by about 18 dB. Do not
 mistake that deliberate attenuation for evidence of a faulty speaker circuit.
+
+The R1 receive pump admits up to 32 transport steps or 1000 microseconds per batch,
+checking control before HTTP on each step. It exits on no progress. A busy batch
+yields one Zephyr tick; idle/backpressure waits 2 ms. This is bounded polling, not
+a new socket-readiness HAL. Stream connect/start/pause callbacks can take longer
+than that admission budget. Logs now include received HTTP bytes/s (headers included),
+would-block/backpressure counts, budget yields and minimum queued PCM frames after
+source playback begins. The first failure's numeric stage and opcode bytes survive
+close; stage names are declared in `eaf_lms_stage_t`. HAL socket errors remain EAF
+codes rather than OS errno values. No physical throughput result is implied.

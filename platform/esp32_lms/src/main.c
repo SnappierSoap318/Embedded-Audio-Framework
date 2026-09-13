@@ -107,21 +107,33 @@ int main(void) {
         }
         if (!rc)
             board_log("LMS connected; select this player's MAC in the server UI");
-        int64_t report = 0, diagnostic = 0;
+        int64_t report = 0, diagnostic = 0, previous_diagnostic = k_uptime_get();
+        uint64_t previous_bytes = client.diagnostics.http_bytes;
         while (!rc && online() && !board_output_failed()) {
-            rc = eaf_lms_client_step(&client);
-            if (rc)
-                board_log("LMS transport/command failed rc=%d (timed sync unsupported)", rc);
+            eaf_lms_pump_result_t pump;
+            rc = eaf_lms_client_pump(&client, 32, 1000, &pump);
+            if (rc) {
+                const eaf_lms_diagnostics_t *d = &client.diagnostics;
+                board_log("LMS failure rc=%d stage=%u opcode=%02x%02x%02x%02x", d->first_error,
+                          (unsigned)d->error_stage, d->error_opcode[0], d->error_opcode[1],
+                          d->error_opcode[2], d->error_opcode[3]);
+            }
             int64_t now = k_uptime_get();
             eaf_lms_playback_t snapshot;
             if (now >= diagnostic) {
                 bool active = board_output_snapshot(&snapshot);
-                board_log("LMS rc=%d stream=%u headers=%u received=%llu PCM=%u queued=%u "
-                          "played_ms=%u underruns=%u failed=%u",
-                          rc, client.streaming ? 1u : 0u, client.headers_done ? 1u : 0u,
-                          (unsigned long long)client.bytes_received, client.pcm_count,
-                          active ? snapshot.queued_bytes : 0u, active ? snapshot.elapsed_ms : 0u,
-                          board_output_underruns(), board_output_failed() ? 1u : 0u);
+                const eaf_lms_diagnostics_t *d = &client.diagnostics;
+                uint64_t span = (uint64_t)(now - previous_diagnostic);
+                uint64_t rate = span ? (d->http_bytes - previous_bytes) * 1000u / span : 0;
+                board_log("RX=%llu B/s total=%llu again=%u backpressure=%u budget=%u",
+                          (unsigned long long)rate, (unsigned long long)d->http_bytes,
+                          d->recv_again, d->backpressure, d->budget_yields);
+                board_log("Output queued=%u min_frames=%u played_ms=%u underruns=%u failed=%u",
+                          active ? snapshot.queued_bytes : 0u, board_output_queue_min(),
+                          active ? snapshot.elapsed_ms : 0u, board_output_underruns(),
+                          board_output_failed() ? 1u : 0u);
+                previous_bytes = d->http_bytes;
+                previous_diagnostic = now;
                 diagnostic = now + 5000;
             }
             if (!rc && !client.wait_cont && !client.wait_start && now >= report &&
@@ -129,7 +141,9 @@ int main(void) {
                 rc = eaf_lms_client_report_playback(&client, &snapshot);
                 report = now + 1000;
             }
-            k_sleep(K_MSEC(2));
+            /* Yield to lower-priority diagnostics even during sustained intake.
+               Idle/backpressure polls remain bounded; no fixed delay per recv. */
+            k_sleep(pump.budget_exhausted ? K_TICKS(1) : K_MSEC(2));
         }
         eaf_lms_client_close(&client);
         if (board_output_failed()) {

@@ -190,3 +190,17 @@ HAL boundaries, static ownership and checked teardown; reference buffer sizes an
 ESP-IDF scheduling choices are not suitable defaults for no-PSRAM WROOM.
 Five relevant existing sanitizer regressions passed during the audit; sustained
 physical throughput and event-order coverage remain required implementation gates.
+
+## R1 bounded receive pumping
+
+The portable LMS client now exposes a progress-driven pump with step and elapsed
+time admission budgets. The WROOM services control before every HTTP step, yields
+one tick after a busy batch, and polls after 2 ms only when idle/backpressured.
+The synchronous stream setup/pause callbacks remain separately bounded operations,
+not covered by the batch admission deadline. No new stream ring or worker was added.
+Session counters retain receive bytes, published frames, would-block/backpressure
+and budget yields; the first failure stage/opcode survives cleanup. Output queue
+minimum is sampled by the audio owner and exported atomically. Regression covers
+all accepted PCM rates/widths/channel counts, fragmented input/output, zero-space
+backpressure, control STOP fairness and first-error retention. Physical sustainable
+throughput and long-play qualification still gate R1 completion.
