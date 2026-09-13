@@ -33,6 +33,12 @@ config EAF_I2S
 config EAF_LMS_CLIENT
 	bool "LMS TCP/HTTP raw PCM client"
 	depends on EAF_LMS && NET_SOCKETS
+config EAF_SENDPIN
+	bool "Sendspin cleartext player client"
+	depends on NET_SOCKETS
+	help
+	  Captured MA 2.10.3 cleartext revision: WebSocket transport, client/hello,
+	  time sync and PCM16 audio into the board output owner.
 config EAF_LMS_INGRESS_BYTES
 	int "Raw PCM ingress ring bytes for the LMS client"
 	default 4096

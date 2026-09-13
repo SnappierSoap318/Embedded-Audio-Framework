@@ -1,0 +1,46 @@
+mainmenu "EAF WROOM Sendspin player"
+config EAF_I2S_MAX_FRAMES
+    default 128
+source "Kconfig.zephyr"
+config EAF_BOARD_I2S
+    bool "Audible I2S output (otherwise timed null)"
+    default y
+    select I2S
+    select EAF_I2S
+config EAF_BOARD_SERVER
+    string "Sendspin server numeric IPv4 address"
+    default "192.168.11.132"
+config EAF_BOARD_PORT
+    int "Sendspin server port"
+    default 8927
+    range 1 65535
+config EAF_BOARD_WIFI_PS_NONE
+    bool "Disable Wi-Fi modem sleep for lower latency"
+    default y
+    help
+      ESP-IDF defaults to WIFI_PS_MIN_MODEM, which wakes only at the AP DTIM
+      period. On a mains-powered player, disabling power save removes those
+      periodic receive stalls at the cost of higher idle current.
+config EAF_BOARD_AUDIO_CPU
+    int "Audio worker CPU (-1 unrestricted)"
+    default -1
+    help
+      With CONFIG_SMP and CONFIG_SCHED_CPU_MASK, pin the audio owner to this
+      CPU so network work cannot preempt it. -1 leaves it unrestricted.
+config EAF_BOARD_MAIN_CPU
+    int "Main/transport CPU (-1 unrestricted)"
+    default -1
+config EAF_BOARD_RESERVOIR_FRAMES
+    int "Output reservoir capacity in frames (power of two)"
+    default 4096
+    range 512 1048576
+    help
+      Stereo Q1.31 output reservoir capacity. Also caps the startup prefill.
+      Must be a power of two.
+config EAF_BOARD_USE_PSRAM
+    bool "Place the output reservoir in external SPI RAM"
+    default n
+    depends on ESP_SPIRAM
+    help
+      Allocate the reservoir from the ESP32 external RAM shared heap. Enables
+      the large-buffer WROVER profile; requires CONFIG_ESP_SPIRAM and PSRAM.

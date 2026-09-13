@@ -18,7 +18,14 @@ if(CONFIG_EAF)
     ../hal/zephyr/hal_os_zephyr.c ../apps/player/eaf_player.c
     ../apps/decoders/dec_wav.c)
   zephyr_library_sources_ifdef(CONFIG_EAF_LMS ../apps/lms/lms_protocol.c)
-  zephyr_library_sources_ifdef(CONFIG_EAF_LMS_CLIENT ../apps/lms/lms_client.c ../hal/zephyr/hal_tcp_zephyr.c)
+  zephyr_library_sources_ifdef(CONFIG_EAF_LMS_CLIENT ../apps/lms/lms_client.c)
+  if(CONFIG_EAF_LMS_CLIENT OR CONFIG_EAF_SENDPIN)
+    zephyr_library_sources(../hal/zephyr/hal_tcp_zephyr.c)
+  endif()
+  zephyr_library_sources_ifdef(CONFIG_EAF_SENDPIN
+    ../apps/sendspin/sendspin_sync.c ../apps/sendspin/sendspin_protocol.c
+    ../apps/sendspin/sendspin_ws.c ../apps/sendspin/sendspin_client.c
+    ../apps/sendspin/sendspin_player.c)
   if(CONFIG_EAF_LMS_CLIENT)
     zephyr_compile_definitions(EAF_LMS_INGRESS_BYTES=${CONFIG_EAF_LMS_INGRESS_BYTES})
   endif()

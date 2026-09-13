@@ -1,0 +1,12 @@
+&psram0 { status = "disabled"; };
+&wifi { status = "okay"; };
+&i2s0_default {
+    group1 {
+        pinmux = <I2S0_O_BCK_GPIO26>, <I2S0_O_WS_GPIO25>, <I2S0_O_SD_GPIO27>;
+    };
+};
+&i2s0 {
+    status = "okay";
+    pinctrl-0 = <&i2s0_default>;
+    pinctrl-names = "default";
+};
