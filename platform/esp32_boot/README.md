@@ -27,18 +27,19 @@ No RF blobs are needed for this radio-disabled boot image.
 
 ## Build
 
-Replace the paths for your workspace. Put the Python environment's `bin` directory
+Install dependencies using [local Zephyr setup](../../docs/zephyr-setup.md).
+Run from the repository root. Put the Python environment's `bin` directory
 on PATH so CMake can locate `esptool`. SDK archives should be checked against the
 release's `sha256.sum` before extraction.
 
 ```sh
-export PATH=/tmp/eaf-zephyr-venv/bin:$PATH
-export ZEPHYR_BASE=/tmp/eaf-zephyr
-export ZEPHYR_SDK_INSTALL_DIR=/tmp/zephyr-sdk-0.17.4
+export PATH="$PWD/build-deps/venv/bin:$PATH"
+export ZEPHYR_BASE="$PWD/build-deps/zephyr"
+export ZEPHYR_SDK_INSTALL_DIR="$PWD/build-deps/zephyr-sdk-0.17.4"
 cmake -S platform/esp32_boot -B build-wroom -G Ninja \
   -DBOARD=esp32_devkitc/esp32/procpu -DZEPHYR_TOOLCHAIN_VARIANT=zephyr \
-  -DPython3_EXECUTABLE=/tmp/eaf-zephyr-venv/bin/python \
-  "-DZEPHYR_MODULES=$PWD;/tmp/eaf-hal-espressif" \
+  -DPython3_EXECUTABLE="$PWD/build-deps/venv/bin/python" \
+  "-DZEPHYR_MODULES=$PWD;$PWD/build-deps/hal-espressif" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build-wroom
 ```

@@ -33,8 +33,8 @@ kernel threads/semaphores, reservoir EOF, null output, protocol ingress, and a
 write failure, verifying that buffers return to the slab rather than leaking.
 The fake device models ownership; it does not model DMA latency or clock drift.
 
-The current checkout and Python build dependencies were prepared under
-`/tmp/eaf-zephyr` and `/tmp/eaf-zephyr-venv`. The actual Zephyr commit used was
+The current checkout and Python build dependencies live under ignored
+`build-deps/`; follow [local Zephyr setup](zephyr-setup.md). The pinned Zephyr commit is
 `3568e1b6d5cdd51a6b964a2a1d6d29200fea2056` (v4.3.0).
 
 To rerun the already-configured build:

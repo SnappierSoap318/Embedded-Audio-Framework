@@ -111,10 +111,10 @@ Wi-Fi/I2S build and local credential handling. The network controller and timed
 null output also build under native_sim for host Clang diagnostics:
 
 ```sh
-ZEPHYR_BASE=/tmp/eaf-zephyr cmake -S platform/esp32_lms -B build-lms-sim -G Ninja \
+ZEPHYR_BASE="$PWD/build-deps/zephyr" cmake -S platform/esp32_lms -B build-lms-sim -G Ninja \
   -DBOARD=native_sim/native/64 -DZEPHYR_TOOLCHAIN_VARIANT=host \
   -DEXTRA_CONF_FILE=null.conf -DZEPHYR_MODULES="$PWD" \
-  -DPython3_EXECUTABLE=/tmp/eaf-zephyr-venv/bin/python \
+  -DPython3_EXECUTABLE="$PWD/build-deps/venv/bin/python" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build-lms-sim
 python3 tools/check_code.py build-lms-sim
@@ -128,7 +128,7 @@ I2S HAL. Native `board_output` uses a timed null backend to exercise repeated tr
 lifecycle, mono expansion, gain/mute and pause without radio or amplifier hardware.
 
 The current local dependency checkouts and Python/SDK tools live in ignored
-`build-deps/` rather than `/tmp`. See the WROOM app README for updated paths.
+`build-deps/` rather than `/tmp`. See [local Zephyr setup](zephyr-setup.md) for installation and environment commands.
 Use a fresh build directory when moving Zephyr's source/toolchain paths; existing
 CMake caches retain absolute paths. Wireless diagnostics were verified with
 `build-wireless-sim` (Clang), `build-wroom-wireless` (I2S) and

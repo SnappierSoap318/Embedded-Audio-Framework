@@ -7,7 +7,8 @@ Bluetooth is disabled for this first network/audio qualification.
 
 ## Build and credentials
 
-Use the SDK and Zephyr/HAL revisions in [the boot app](../esp32_boot/README.md).
+Follow [local Zephyr setup](../../docs/zephyr-setup.md) to install the pinned SDK,
+Zephyr, modules, Python environment and verified ESP32 radio libraries.
 Additionally check out the Zephyr manifest's mbedTLS revision
 `c5b06d89c9c498d8fc8659ce31f7e53137b6270f` at `build-deps/mbedtls`. Keep dependencies under the ignored `build-deps/`
 directory so a reboot does not remove the toolchain.
