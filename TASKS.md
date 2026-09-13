@@ -139,9 +139,12 @@ encrypted revision is a separate, later target.
   (192.168.11.132:8927): `player@v1` active, time filter converged.
 - [ ] **S03 — Phase 2 WROOM PCM proof.** `stream/start` -> PCM16 -> Q1.31 ->
   reservoir/graph/I2S; small buffer; hard sync only. Gate: audible PCM from MA.
-  Portable producer complete (`apps/sendspin/sendspin_player.c`: PCM16 -> Q1.31,
-  hard-sync late-drop, mono expansion, reservoir write, host tests). Board app
-  (Wi-Fi + sink/worker + sendspin client loop) pending the output-reuse choice.
+  Software complete: portable producer (`apps/sendspin/sendspin_player.c`),
+  protocol-agnostic `platform/esp32_output` owner extracted from esp32_lms, and
+  `platform/esp32_sendspin` app (Wi-Fi + client + producer -> shared owner/I2S).
+  Builds for native_sim (null) and esp32_devkitc/esp32/procpu (I2S, DRAM0 79%);
+  host and lint suites pass. Remaining: flash the WROOM and record audible PCM,
+  real-time intake and format/underrun telemetry.
 - [ ] **S04 — Phase 3 WROVER/PSRAM sync quality.** PSRAM jitter buffer, drift
   correction, measured inter-device phase error.
 - [ ] **S05 — Phase 4 spec-current encryption/pairing.** Noise `KKpsk2` via

@@ -124,6 +124,13 @@ with the clock converging.
 
 ## Phase 2 — Player audio on WROOM (proof)
 
+Status: software complete (2026-09-13); audible hardware gate pending. The
+protocol-agnostic output owner now lives in `platform/esp32_output`, and
+`platform/esp32_sendspin` wires Wi-Fi, the client, and the portable producer
+(`eaf_sendspin_player`: PCM16 -> Q1.31, hard-sync late drop, mono expansion)
+into it. Builds for `native_sim` and `esp32_devkitc/esp32/procpu` (I2S, DRAM0
+79%). Remaining: flash the WROOM and confirm audible PCM and telemetry.
+
 - `stream/start` -> PCM16 -> Q1.31 -> existing reservoir/graph/I2S.
 - Report a small buffer capacity; schedule frames using `compute_client_time`;
   implement hard sync (drop/refill) only.
@@ -171,12 +178,12 @@ works.
 - New portable sources under `apps/sendspin/`; public headers
   `include/eaf/eaf_sendspin.h`, `eaf_sendspin_client.h`.
 - HAL: WebSocket layer over `hal_tcp`; add `TCP_NODELAY`.
-- New app `platform/esp32_sendspin/` (CMakeLists, prj.conf, boards/*, src/main.c).
-- Output reuse: the board output owner currently lives in `platform/esp32_lms` and
-  exposes `eaf_lms_callbacks_t`. Decision needed: extract a protocol-agnostic
+- New app `platform/esp32_sendspin/` (CMakeLists, Kconfig, prj.conf, boards/*,
+  src/main.c): implemented behind `CONFIG_EAF_SENDPIN`.
+- Output reuse: done. The protocol-agnostic owner lives in
   `platform/esp32_output/` (reservoir, graph, sink, volume, pause, worker,
-  snapshot) with a generic producer interface, or stand up
-  `platform/esp32_sendspin` with a copied output and refactor later.
+  snapshot); `platform/esp32_lms` adapts `eaf_lms_callbacks_t` to it and
+  `platform/esp32_sendspin` drives it from the portable producer.
 - Build wiring: `zephyr/Kconfig` + `zephyr/CMakeLists.txt`; app Kconfig for the
   Sendspin server URL/port (make this runtime-configurable to avoid reflashes).
 - Tests: `tests/test_sendspin_protocol.c`, `test_sendspin_ws.c`,
@@ -205,7 +212,7 @@ works.
 Resolved: implement the captured cleartext revision first (3); outbound
 WebSocket to `ws://<ma-ip>:8927/sendspin`, mDNS later (4); PCM-only first (5);
 runtime-configurable URL/port (7); MA IP `192.168.11.132` confirmed, LMS disabled
-while testing (8).
+while testing (8); extract `platform/esp32_output/` (S03).
 
 Still open:
 
@@ -213,14 +220,13 @@ Still open:
    `sendspin-cpp` tracks the spec-current encrypted revision; the captured
    revision matches `aiosendspin` 6.0.5).
 2. WROOM scope: connection/frame/PCM proof only, then WROVER for sync.
-3. Extract `platform/esp32_output/` now, or copy the output into the Sendspin app
-   and refactor later.
 
 ## Immediate next actions
 
 1. Phase 0 and Phase 1 done: [capture](bench/sendspin-capture-2026-09-13.md) and
    the portable client above.
-2. Phase 2: feed `stream/start` PCM16 into the existing Q1.31 reservoir/graph and
-   reuse the I2S sink on the WROOM boot app (S03).
+2. Phase 2 software done: flash `build-wroom-sendspin` on the WROOM, play from
+   MA to `EAF Sendspin WROOM`, and record audible PCM plus `chunks/written/
+   dropped/underruns` (S03 gate).
 3. Optional now: play a track to `EAF Native Probe` and confirm binary Type-4
-   audio dispatch against real MA.
+   audio dispatch against real MA on the host.

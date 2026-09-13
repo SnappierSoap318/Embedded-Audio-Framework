@@ -136,3 +136,24 @@ CMake caches retain absolute paths. Wireless diagnostics were verified with
 `build-wireless-null` (silent backend). Native `board_log` checks bounded history,
 truncation and concurrent reads/writes; optional Node-backed `web_page` checks
 stalled-fetch recovery using the actual embedded page script.
+
+## Sendspin application
+
+The cleartext Sendspin client (captured MA 2.10.3 revision) and the shared board
+output owner are documented in [the Sendspin plan](sendspin-plan.md) and
+[the capture](bench/sendspin-capture-2026-09-13.md). Host modules live in
+`apps/sendspin` (`sendspin_sync`, `sendspin_protocol`, `sendspin_ws`,
+`sendspin_client`, `sendspin_player`) with `test_sendspin_*` regressions. The
+protocol-agnostic reservoir/graph/sink/worker is `platform/esp32_output`; both
+`platform/esp32_lms` and `platform/esp32_sendspin` build against it. Build the
+board app like the LMS one (see its README) with `CONFIG_EAF_SENDPIN=y`, and the
+host harness with:
+
+```sh
+cmake --build build-phase1 --target eaf_sendspin_probe
+./build-phase1/eaf_sendspin_probe <ma-ip> 8927 15
+```
+
+`eaf_sendspin_probe` reaches `player@v1` activation and clock convergence
+against a real MA. Physical WROOM playback (audible PCM, real-time intake) is the
+open Phase 2 gate.
