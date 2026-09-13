@@ -124,12 +124,21 @@ with the clock converging.
 
 ## Phase 2 — Player audio on WROOM (proof)
 
-Status: software complete (2026-09-13); audible hardware gate pending. The
-protocol-agnostic output owner now lives in `platform/esp32_output`, and
+Status: **hardware-validated in mono on WROOM** (2026-09-13). The
+protocol-agnostic output owner lives in `platform/esp32_output` and
 `platform/esp32_sendspin` wires Wi-Fi, the client, and the portable producer
-(`eaf_sendspin_player`: PCM16 -> Q1.31, hard-sync late drop, mono expansion)
-into it. Builds for `native_sim` and `esp32_devkitc/esp32/procpu` (I2S, DRAM0
-79%). Remaining: flash the WROOM and confirm audible PCM and telemetry.
+(`eaf_sendspin_player`: PCM16 -> Q1.31, mono expansion, optional hard-sync drop)
+into it. Server-driven volume/mute (`server/command`) is implemented.
+
+Physical results: stereo PCM16 needs 176 kB/s; measured Wi-Fi throughput on the
+bench varies 72-175 kB/s, so the 4096-frame reservoir starves. Advertising mono
+(`CONFIG_EAF_SOURCE_CHANNELS=1`, ~88 kB/s) yields `rx≈88.8 kB/s`, near-zero
+underruns, `lat≈+38 ms` while the link holds; intermittent half-rate dips still
+break it. Volume and mute are confirmed working from MA. The WROVER/PSRAM profile
+(65536 frames, ~1.5 s) is built and is the intended fix for the dips.
+
+Gate: audible PCM from MA is met for mono on WROOM; sustained stereo and the
+jitter buffer remain on the WROVER (Phase 3).
 
 - `stream/start` -> PCM16 -> Q1.31 -> existing reservoir/graph/I2S.
 - Report a small buffer capacity; schedule frames using `compute_client_time`;

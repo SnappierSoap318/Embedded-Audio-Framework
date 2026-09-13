@@ -141,12 +141,16 @@ encrypted revision is a separate, later target.
   reservoir/graph/I2S; small buffer; hard sync only. Gate: audible PCM from MA.
   Software complete: portable producer (`apps/sendspin/sendspin_player.c`),
   protocol-agnostic `platform/esp32_output` owner extracted from esp32_lms, and
-  `platform/esp32_sendspin` app (Wi-Fi + client + producer -> shared owner/I2S).
-  Builds for native_sim (null) and esp32_devkitc/esp32/procpu (I2S, DRAM0 79%);
-  host and lint suites pass. Remaining: flash the WROOM and record audible PCM,
-  real-time intake and format/underrun telemetry.
-- [ ] **S04 — Phase 3 WROVER/PSRAM sync quality.** PSRAM jitter buffer, drift
-  correction, measured inter-device phase error.
+  `platform/esp32_sendspin` app (Wi-Fi + client + producer -> shared owner/I2S);
+  server-driven volume/mute implemented. Physical WROOM results: stereo PCM16
+  needs 176 kB/s and Wi-Fi throughput varies 72-175 kB/s, so the 4096-frame
+  reservoir starves; mono (`CONFIG_EAF_SOURCE_CHANNELS=1`, ~88 kB/s) plays with
+  near-zero underruns and `rx≈88.8 kB/s` while the link holds, but intermittent
+  half-rate dips still break it. Remaining: close the gate on the WROVER profile.
+- [ ] **S04 — Phase 3 WROVER/PSRAM sync quality.** PSRAM jitter buffer
+  (`psram.conf`: 65536 frames ≈1.5 s, built at DRAM0 67%), drift correction,
+  measured inter-device phase error. Wi-Fi throughput must support real-time
+  stereo; mono remains the WROOM fallback.
 - [ ] **S05 — Phase 4 spec-current encryption/pairing.** Noise `KKpsk2` via
   mbedTLS and pairing, gated on a future MA/spec revision.
 
