@@ -1,8 +1,15 @@
 # EAF Sendspin player — implementation plan
 
-Status: proposed. Target: Music Assistant (MA) Sendspin server, ESP32 WROOM first
-(proof), ESP32-WROVER/PSRAM later (sync). This document is self-contained so a new
-session can execute it.
+Status: Phase 0 complete. Target: Music Assistant (MA) Sendspin server, ESP32
+WROOM first (proof), ESP32-WROVER/PSRAM later (sync). This document is
+self-contained so a new session can execute it.
+
+Captured result (2026-09-13): **MA 2.10.3 speaks an older cleartext Sendspin
+revision** — plain `ws://`, `client/hello` → `server/hello`, no `client/init`,
+no `server/init`, no Noise, no `server/activate`, binary header `>Bq`. See
+[the Phase 0 capture](bench/sendspin-capture-2026-09-13.md). The current upstream
+spec mandates Noise and an init exchange; treat that as a later (future MA)
+revision, not what this server does today.
 
 ## Goal
 
@@ -19,27 +26,34 @@ artwork/visualizer roles, mDNS, multi-protocol source arbitration.
 - MA 2.10.3 ships Sendspin built-in and always on. Hardware endpoint:
   `ws://<ma-ip>:8927/sendspin` (plain `ws://`; the path `/sendspin` on port 8095 is
   reserved for MA's web player and rejects other clients).
-- MA setting "Allow legacy clients" is on by default and accepts devices that
-  connect without encryption. Use this to stage the audio path before Noise.
+- MA 2.10.3 has **no "Allow legacy clients" setting** in its UI or API. It does
+  not need one: it implements the pre-Noise revision and accepts cleartext
+  clients unconditionally (captured 2026-09-13).
 - Spec: github.com/Sendspin/spec (Open Home Foundation). SDKs: aiosendspin,
   sendspin-cpp ("suitable for embedded", Apache-2.0), sendspin-rs, sendspin-dotnet,
   SendspinKit. ESP32 prior art: RealDeco/SendspinZero (ESP32-S3, 2 MB PSRAM, MIT).
-- Wire protocol (high level):
-  - WebSocket transport. Cleartext JSON: `client/init` -> `server/init` ->
-    (`noise/handshake`) -> transport mode. Then encrypted JSON: `server/hello` ->
-    `client/hello` -> `server/activate`.
-  - Continuous `client/time` -> `server/time` for clock sync.
+- Wire protocol — **captured MA 2.10.3 revision** (implement this first):
+  - WebSocket transport, cleartext throughout. `client/hello` -> `server/hello`.
+    No `client/init`, no `server/init`, no Noise, no `server/activate`.
+  - Continuous `client/time` -> `server/time` for clock sync (200 ms burst, then
+    3 s once synchronized).
   - Stream lifecycle: `stream/start`, binary role frames, `stream/clear`,
     `stream/end`. Player role uses binary message IDs 4-7.
-  - `client/state` carries `available` and role objects. A player MUST NOT report
-    `available: true` until its time filter has converged.
-  - Audio chunks carry a server timestamp and a `send_ahead` interval; the client
-    maps them to its local clock via the time-filter (a 2-D Kalman filter tracking
-    offset and drift) and schedules playback.
-  - Fragmentation: Noise plaintext max 65518 bytes; larger messages split using
-    binary type 1 with first/last flag bits.
-  - Audio is 16-bit to Sendspin players; codecs include PCM and FLAC. PCM is the
-    first target; MA transcodes.
+  - Binary Type-4 header is `>Bq`: type byte `0x04` + 8-byte **big-endian**
+    signed microseconds timestamp; body is interleaved PCM16 little-endian.
+    Chunks are ~25 ms; this revision has **no `send_ahead` field**.
+  - `client/state` carries the `player` object (state/volume/mute/static delay,
+    lead time, min buffer). Activation is conveyed by `server/hello.active_roles`,
+    not by `server/activate`.
+  - Audio is 16-bit to players; codecs include PCM and FLAC. PCM is the first
+    target; MA transcodes.
+- Wire protocol — **current upstream spec** (future MA, do later / Phase 4):
+  - `client/init` -> `server/init` -> `noise/handshake` -> encrypted transport,
+    then encrypted `server/hello` -> `client/hello` -> `server/activate`.
+  - Audio chunks add a `send_ahead` interval; fragmentation uses binary type 1
+    with first/last flag bits (Noise plaintext max 65518 bytes).
+  - mDNS `_sendspin-server._tcp` (client-initiated) or `_sendspin._tcp`
+    (server-initiated).
 - Zephyr already links mbedTLS in the EAF build: X25519, ChaCha20-Poly1305,
   AES-GCM, SHA-256, HKDF are available for the later Noise phase.
 - Licensing: spec/SDKs Apache-2.0, SendspinZero MIT. Clean-room C or an
@@ -47,34 +61,36 @@ artwork/visualizer roles, mDNS, multi-protocol source arbitration.
 
 ## Phase 0 — Reference capture and spec lock (host only, no EAF changes)
 
-Goal: capture a real MA session and turn it into Phase 1 fixtures. Do not guess
-the handshake or frame layouts.
+Status: **complete** (2026-09-13). Deliverable:
+[docs/bench/sendspin-capture-2026-09-13.md](bench/sendspin-capture-2026-09-13.md).
 
-1. On MA: confirm the Sendspin provider is enabled (built-in), "Allow legacy
-   clients" = on, and note the MA IP. Ensure the board and MA share the LAN.
-2. Install the reference client on the host: `uv tool install sendspin`
-   (or `pip install sendspin`).
-3. Connect to MA, force PCM, enable DEBUG logging:
-   `sendspin --url ws://<ma-ip>:8927/sendspin --audio-format pcm:44100:16:2 --log-level DEBUG`
-4. Capture the wire concurrently (legacy/unencrypted client => cleartext):
-   `sudo tcpdump -i <iface> -s0 -w /tmp/sendspin.pcap host <ma-ip> and port 8927`
-   (or use `websocat`/tshark to pretty-print frames).
-5. Extract and annotate, with exact byte layouts:
-   - WebSocket Upgrade request/response headers (Sec-WebSocket-Key/Accept, etc.).
-   - `client/init`: `client_id` form, `version`, `suite`; whether `noise/handshake`
-     is present or skipped in the unencrypted path.
-   - `server/hello`, `client/hello` (`supported_roles`, and the complete
-     `player@v1_support` object: formats, buffer capacity, and any required fields),
-     `server/activate` (`activities`, `active_roles`).
-   - `client/time` cadence and the exact `server/time` fields.
-   - `stream/start` payload (codec, sample_rate, bit_depth, channels, group info).
-   - Binary type-4 header layout (server timestamp, `send_ahead`, payload framing),
-     chunk sizes, and cadence; note the 16-bit PCM byte order.
-   - `client/state` player object, `group/update`, `stream/end`, `client/goodbye`.
-6. Save `docs/bench/sendspin-capture-<date>.md` with the annotated trace (raw pcap
-   stays ignored). Pin the spec commit and MA version in the doc.
+Executed method (for future re-captures):
+
+1. Confirm MA IP and reachability; MA's Sendspin control API
+   (`ws://<ma-ip>:8095/ws`) requires authentication, so playback must be started
+   manually in the MA UI. Discovery: `sendspin servers list` or
+   `avahi-browse -rt _sendspin-server._tcp`.
+2. Install the reference client: `uv tool install sendspin` (v7.5.0; ships
+   `aiosendspin` 6.0.5 and provides the `sendspin` CLI with `player`/`daemon`
+   subcommands, not the flat flags formerly assumed).
+3. Capture the wire with Docker `netshoot` (`--net=host --cap-add=NET_ADMIN
+   --cap-add=NET_RAW`) running `tcpdump ... host <ma-ip> and port 8927`; dissect
+   in the same container with `tshark`. This avoids host sudo/`tshark` installs.
+4. Run the instrumented client `tools/sendspin_probe.py` (wraps `aiosendspin` and
+   logs every cleartext JSON message and binary frame header), then start playback
+   to the advertised `EAF Phase0 Probe` player.
+5. Annotate exact byte layouts and pin MA version + reference-library version.
+   (The upstream spec `main` now diverges from MA 2.10.3; pin both.)
+
+Captured: Upgrade headers; `client/hello` (407 B) / `server/hello` (208 B);
+`client/state` (164 B); `client/time` (67 B) / `server/time` (130 B);
+`group/update` (112 B); `stream/start` (141 B); `stream/end` (85 B);
+`client/goodbye` (61 B); binary Type-4 (4417 B = 9 B header + 4408 B PCM16).
 
 Deliverable: annotated capture + frame layouts = Phase 1 test fixtures.
+
+Gaps to capture later: `stream/clear` (seek), `server/command` (volume/mute),
+non-player roles, FLAC/`codec_header`, and a spec-current (Noise) server.
 
 ## Phase 1 — Transport and core protocol (portable C, host-testable)
 
@@ -83,18 +99,21 @@ Deliverable: annotated capture + frame layouts = Phase 1 test fixtures.
   Close, fragmentation reassembly.
 - `apps/sendspin/sendspin_protocol.c`: bounded JSON encode/decode for the core
   messages (hand-rolled scanner, matching the SlimProto header-key style);
-  `client/init`, `server/init`, `server/hello`, `client/hello` (player@v1 +
-  support object), `server/activate`, `client/state`.
+  captured revision: `client/hello` (`player@v1_support`), `server/hello`,
+  `client/state`, `client/time`/`server/time`, `group/update`, `stream/start`,
+  `stream/clear`, `stream/end`, `client/goodbye`.
 - `apps/sendspin/sendspin_client.c`: state machine, connect/reconnect, time-sync
   loop, `stream/start` intake, binary frame dispatch.
 - `apps/sendspin/sendspin_sync.c`: portable C port of the Sendspin time-filter
   (Kalman offset+drift) and `compute_client_time`.
-- Legacy-unencrypted handshake only in this phase.
+- Cleartext handshake only in this phase (the captured MA revision). The
+  spec-current `client/init`/`server/init`/Noise path is deferred to Phase 4.
 - Tests: independent wire vectors from Phase 0; fragmented frames; malformed
   length/JSON guards; simulated WebSocket server.
 
-Gate: host tests pass; a native harness connects to real MA and reaches
-`server/activate` with `player@v1` active and the clock converging.
+Gate: host tests pass; a native harness connects to real MA and reaches an
+active `player@v1` session (`server/hello.active_roles` includes `player@v1`)
+with the clock converging.
 
 ## Phase 2 — Player audio on WROOM (proof)
 
@@ -119,12 +138,15 @@ no format errors.
 Gate: no audible echo across two players over a multi-minute run; measured phase
 error documented.
 
-## Phase 4 — Encryption and pairing
+## Phase 4 — Encryption and pairing (spec-current servers)
+
+Applies to a future MA/spec revision that implements the `client/init`/Noise
+handshake. MA 2.10.3 does **not** — do not block current work on this.
 
 - Noise `KKpsk2` using mbedTLS primitives; persistent Curve25519 identity keypair
   (CSPRNG); Sentinel PSK fallback; `psk_id`/`psk_category` handling.
 - Optional pairing (pairing PSK / static or dynamic code) if required.
-- Legacy-unencrypted remains bench-only.
+- Keep the captured cleartext revision as a fallback for older servers.
 
 Gate: connects to MA as a paired or unpaired encrypted client; legacy mode still
 works.
@@ -167,26 +189,29 @@ works.
 - WebSocket, a new clock model, and later Noise are all new to EAF. mbedTLS lowers
   the crypto risk.
 - WROOM cannot host a meaningful jitter buffer; keep sync work on the WROVER.
-- MA "Allow legacy clients" is a temporary compatibility option; do not depend on
-  it for production.
+- Protocol revision skew: MA 2.10.3's cleartext revision is behind the upstream
+  spec (Noise + init). Design the client so a future spec-current server can be
+  added in Phase 4 without reworking the transport.
 
-## Open decisions (resolve before execution)
+## Open decisions
 
-1. Clean-room C implementation vs porting Apache-2.0 `sendspin-cpp`.
-2. WROOM scope: connection/frame/PCM proof only, then WROVER for sync (recommended).
-3. Legacy-unencrypted first, then Noise via mbedTLS (recommended).
-4. Outbound WebSocket client to `ws://<ma-ip>:8927/sendspin` first, mDNS later
-   (recommended).
-5. PCM-only first, FLAC later (recommended).
-6. Extract `platform/esp32_output/` now, or copy the output into the Sendspin app
+Resolved: implement the captured cleartext revision first (3); outbound
+WebSocket to `ws://<ma-ip>:8927/sendspin`, mDNS later (4); PCM-only first (5);
+runtime-configurable URL/port (7); MA IP `192.168.11.132` confirmed, LMS disabled
+while testing (8).
+
+Still open:
+
+1. Clean-room C implementation vs porting Apache-2.0 `sendspin-cpp` (note:
+   `sendspin-cpp` tracks the spec-current encrypted revision; the captured
+   revision matches `aiosendspin` 6.0.5).
+2. WROOM scope: connection/frame/PCM proof only, then WROVER for sync.
+3. Extract `platform/esp32_output/` now, or copy the output into the Sendspin app
    and refactor later.
-7. Make the Sendspin server URL/port runtime-configurable from the start
-   (recommended).
-8. Confirm the MA IP; keep LMS disabled while testing Sendspin.
 
-## Immediate next actions (new session)
+## Immediate next actions
 
-1. Execute Phase 0 and commit the capture doc (`docs/bench/sendspin-capture-<date>.md`).
+1. Phase 0 done and captured: [docs/bench/sendspin-capture-2026-09-13.md](bench/sendspin-capture-2026-09-13.md).
 2. Implement Phase 1 against the captured bytes; run host tests.
-3. Connect the native harness to MA; confirm `player@v1` activation and clock
-   convergence.
+3. Connect the native harness to MA; confirm `player@v1` is active in
+   `server/hello.active_roles` and the clock converges.

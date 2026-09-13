@@ -116,6 +116,29 @@ attempting synchronized playback; the underlying T tasks below remain open.
 - [ ] **R5 — Timed sync:** schedule frame/timestamp controls only after presentation
   accounting and standalone playback are qualified (T19/T20).
 
+## Sendspin player — P0/P1
+
+Plan: [docs/sendspin-plan.md](docs/sendspin-plan.md). Captured protocol:
+[docs/bench/sendspin-capture-2026-09-13.md](docs/bench/sendspin-capture-2026-09-13.md).
+MA 2.10.3 speaks an older cleartext revision (no Noise); the spec-current
+encrypted revision is a separate, later target.
+
+- [x] **S01 — Phase 0 capture and spec lock.** Capture a real MA session and pin
+  versions. Completed: Upgrade headers, `client/hello`/`server/hello`,
+  `client/state`, `client/time`/`server/time`, `group/update`, `stream/start`/
+  `stream/end`, `client/goodbye`, and the `>Bq` binary Type-4 layout are recorded;
+  probe tool at `tools/sendspin_probe.py`.
+- [ ] **S02 — Phase 1 transport and core protocol.** WebSocket client over
+  `hal_tcp`, bounded cleartext JSON encode/decode, binary dispatch, time-filter
+  port. Test with captured vectors and a simulated server. Gate: native harness
+  reaches an active `player@v1` session against real MA with the clock converging.
+- [ ] **S03 — Phase 2 WROOM PCM proof.** `stream/start` -> PCM16 -> Q1.31 ->
+  reservoir/graph/I2S; small buffer; hard sync only. Gate: audible PCM from MA.
+- [ ] **S04 — Phase 3 WROVER/PSRAM sync quality.** PSRAM jitter buffer, drift
+  correction, measured inter-device phase error.
+- [ ] **S05 — Phase 4 spec-current encryption/pairing.** Noise `KKpsk2` via
+  mbedTLS and pairing, gated on a future MA/spec revision.
+
 ## LMS/transport completeness — P1
 
 - [ ] **T10 — Reference wire corpus.** Add independently documented HELO/STAT/strm/
