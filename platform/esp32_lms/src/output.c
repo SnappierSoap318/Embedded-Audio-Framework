@@ -26,8 +26,9 @@ static eaf_sink_t *sink;
 static uint8_t input_channels;
 static eaf_volume_ctx_t volume = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};
 static eaf_node_t master = {"LMS volume", EAF_NODE_STAGE_POST_PROCESS, &eaf_volume_ops, &volume};
-/* Fixed -18 dB bench attenuation even if LMS requests full volume. */
-static eaf_volume_ctx_t attenuation = {{268435456, 268435456, 268435456, 268435456}};
+/* Fixed -10 dB bench attenuation even if LMS requests full volume.
+   Q1.31 gain = round(2^31 * 10^(-10/20)) = 679093957. */
+static eaf_volume_ctx_t attenuation = {{679093957, 679093957, 679093957, 679093957}};
 static eaf_node_t limiter = {"bench attenuation", EAF_NODE_STAGE_PRE_PROCESS, &eaf_volume_ops,
                              &attenuation};
 static eaf_node_t *const nodes[] = {&limiter, &master};

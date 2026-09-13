@@ -70,8 +70,8 @@ profiles keep the same portable core and HAL.
 
 Follow [the wiring checks](../../docs/bench/wroom-max98357a-wiring.md) first.
 The audible image uses GPIO26 BCLK, GPIO25 LRC and GPIO27 DIN, 32-bit stereo
-slots. Both mono and stereo LMS PCM streams become stereo I2S. A fixed 1/8
-amplitude stage (about −18 dB) precedes LMS volume/mute for initial bench use.
+slots. Both mono and stereo LMS PCM streams become stereo I2S. A fixed −10 dB
+amplitude stage precedes LMS volume/mute for initial bench use.
 
 Once the board is connected by USB and ready for replacement firmware, use the
 boot app's identification/backup procedure, then:
@@ -149,7 +149,7 @@ sustained physical playback validation; it is not proof that every stall is fixe
 Use standalone playback for qualification. Timestamped `strmu`/`strmp` commands
 used by synchronized playback currently return EAF_UNSUPPORTED and terminate the
 LMS session. Timed starts, clock correction and proper sync status remain pending.
-The fixed 1/8 gain stage still reduces maximum LMS volume by about 18 dB. Do not
+The fixed −10 dB gain stage still reduces maximum LMS volume. Do not
 mistake that deliberate attenuation for evidence of a faulty speaker circuit.
 
 The R1 receive pump admits up to 32 transport steps or 1000 microseconds per batch,
