@@ -337,6 +337,7 @@ int eaf_sendspin_client_step(eaf_sendspin_client_t *client) {
         return EAF_OK;
     if (rc)
         return fail(client);
+    client->rx_total += received;
     if (eaf_sendspin_ws_rx_feed(&client->rx, client->rx_bytes, received, on_message, client))
         return fail(client);
     return EAF_OK;

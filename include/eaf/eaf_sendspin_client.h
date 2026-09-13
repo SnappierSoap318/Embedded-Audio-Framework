@@ -74,6 +74,7 @@ typedef struct {
     eaf_sendspin_client_state_t state;
     bool handshaken, notified, stream_active;
     uint64_t next_time_us;
+    uint64_t rx_total;
 } eaf_sendspin_client_t;
 
 void eaf_sendspin_client_init(eaf_sendspin_client_t *client, const eaf_sendspin_config_t *config,

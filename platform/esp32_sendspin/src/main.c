@@ -182,7 +182,7 @@ int main(void) {
                                     .volume = 100,
                                     .static_delay_ms = 0,
                                     .required_lead_time_ms = (int32_t)capacity_ms,
-                                    .min_buffer_ms = (int32_t)(capacity_ms / 2u)};
+                                    .min_buffer_ms = (int32_t)capacity_ms};
     eaf_sendspin_callbacks_t callbacks = {.ready = on_ready,
                                           .stream_start = on_stream_start,
                                           .audio = on_audio,
@@ -218,19 +218,33 @@ int main(void) {
         }
         board_log("Sendspin connected; select this player in Music Assistant\n");
         int64_t report = 0;
+        uint64_t previous_rx = client.rx_total;
+        int64_t previous_ms = k_uptime_get();
         while (!rc && online() && !eaf_board_output_failed()) {
-            rc = eaf_sendspin_client_step(&client);
+            /* Drain the socket greedily so the server's TCP window stays open. */
+            uint64_t before = client.rx_total;
+            for (unsigned i = 0; i < 8 && !rc; ++i) {
+                rc = eaf_sendspin_client_step(&client);
+                if (client.rx_total == before)
+                    break;
+                before = client.rx_total;
+            }
             int64_t now = k_uptime_get();
             if (now >= report) {
+                uint64_t span = (uint64_t)(now - previous_ms);
+                uint64_t rate = span ? (client.rx_total - previous_rx) * 1000u / span : 0;
                 board_log("Sendspin chunks=%u written=%u dropped=%u underruns=%u sync=%d "
-                          "lat_ms=%lld level=%u flags=%u\n",
+                          "lat_ms=%lld level=%u flags=%u rx=%llu B/s\n",
                           (unsigned)atomic_get(&chunks), player.frames_written,
                           player.frames_dropped, eaf_board_output_underruns(),
                           (int)player.synchronized, (long long)(player.last_latency_us / 1000),
-                          eaf_board_output_level(), eaf_board_output_flags());
+                          eaf_board_output_level(), eaf_board_output_flags(),
+                          (unsigned long long)rate);
+                previous_rx = client.rx_total;
+                previous_ms = now;
                 report = now + 5000;
             }
-            k_sleep(K_MSEC(2));
+            k_sleep(K_MSEC(1));
         }
         eaf_sendspin_client_close(&client);
         eaf_sendspin_player_finish(&player);
