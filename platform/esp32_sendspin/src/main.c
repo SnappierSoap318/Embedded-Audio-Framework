@@ -168,15 +168,22 @@ int main(void) {
 
     uint32_t capacity = eaf_board_output_capacity_frames();
     uint32_t capacity_ms = capacity * 1000u / 48000u;
+#if defined(CONFIG_EAF_BOARD_MONO)
+    const uint8_t source_channels = 1;
+    const uint32_t bytes_per_frame = 2;
+#else
+    const uint8_t source_channels = 2;
+    const uint32_t bytes_per_frame = 4;
+#endif
     eaf_sendspin_config_t config = {.client_id = "eaf-sendspin-wroom",
                                     .name = "EAF Sendspin WROOM",
                                     .product_name = "EAF Sendspin WROOM",
                                     .manufacturer = "EAF",
                                     .software_version = "phase2",
                                     .sample_rate = 44100,
-                                    .channels = 2,
+                                    .channels = source_channels,
                                     .bit_depth = 16,
-                                    .buffer_capacity = capacity * 2u * 2u,
+                                    .buffer_capacity = capacity * bytes_per_frame,
                                     .support_volume = true,
                                     .support_mute = true,
                                     .volume = 100,
