@@ -1,6 +1,21 @@
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_lms_client.h>
 #include <string.h>
+int eaf_lms_buffer_limits(const eaf_format_t *fmt, const eaf_lms_buffer_request_t *request,
+                          uint32_t capacity, uint32_t preferred, eaf_lms_buffer_limits_t *limits) {
+    if (!fmt || !request || !limits || !eaf_format_valid(fmt) || !capacity || !preferred ||
+        preferred > capacity || request->sample_bytes < 2 || request->sample_bytes > 4)
+        return EAF_INVALID;
+    uint32_t frame_bytes = (uint32_t)request->sample_bytes * fmt->num_channels;
+    uint64_t stream = ((uint64_t)request->stream_bytes + frame_bytes - 1u) / frame_bytes;
+    uint64_t output = ((uint64_t)request->output_ms * fmt->sample_rate + 999u) / 1000u;
+    uint64_t ready = stream > output ? stream : output;
+    if (ready < preferred)
+        ready = preferred;
+    *limits = (eaf_lms_buffer_limits_t){capacity, ready > capacity ? capacity : (uint32_t)ready,
+                                        ready > capacity};
+    return EAF_OK;
+}
 static void record_error(eaf_lms_client_t *c, int rc) {
     if (rc && !c->diagnostics.first_error) {
         c->diagnostics.first_error = rc;
@@ -47,6 +62,10 @@ static void stop_stream(eaf_lms_client_t *c) {
     if (c->streaming)
         c->callbacks.stop(c->callbacks.ctx);
     c->streaming = false;
+    c->buffered_output = c->output_released = c->output_paused = false;
+    c->input_eof = c->eof_sent = false;
+    c->prefill_frames = 0;
+    c->buffer_limits = (eaf_lms_buffer_limits_t){0};
     c->pcm_count = 0;
     c->pcm_sent = 0;
     c->body_done = false;
@@ -116,6 +135,7 @@ static int command(void *ctx, const uint8_t *p, size_t n) {
             if (rc)
                 return rc;
         }
+        c->output_paused = false;
         return status(c, "STMr", 0);
     }
     if (s.command == 'p') {
@@ -124,6 +144,8 @@ static int command(void *ctx, const uint8_t *p, size_t n) {
         if (!c->streaming)
             return EAF_STATE;
         rc = c->callbacks.pause(c->callbacks.ctx, true);
+        if (!rc)
+            c->output_paused = true;
         return rc ? rc : status(c, "STMp", 0);
     }
     if (s.command != 's')
@@ -147,7 +169,20 @@ static int command(void *ctx, const uint8_t *p, size_t n) {
     if (rc)
         return rc;
     c->stage = EAF_LMS_STAGE_OUTPUT_START;
-    rc = c->callbacks.start(c->callbacks.ctx, &c->format);
+    c->buffered_output = c->callbacks.start_buffered != NULL;
+    if (c->buffered_output) {
+        const eaf_lms_buffer_request_t request = {(uint32_t)s.threshold_kib * 1024u,
+                                                  (uint32_t)s.output_threshold_ds * 100u,
+                                                  (uint8_t)c->width};
+        rc = c->callbacks.start_buffered(c->callbacks.ctx, &c->format, &request, &c->buffer_limits);
+        if (!rc && (!c->buffer_limits.ready_frames ||
+                    c->buffer_limits.ready_frames > c->buffer_limits.capacity_frames)) {
+            c->callbacks.stop(c->callbacks.ctx);
+            rc = EAF_INVALID;
+        }
+    } else {
+        rc = c->callbacks.start(c->callbacks.ctx, &c->format);
+    }
     if (rc) {
         hal_tcp_close(&c->http);
         return rc;
@@ -166,7 +201,8 @@ static int command(void *ctx, const uint8_t *p, size_t n) {
     return status(c, "STMc", 0);
 }
 int eaf_lms_client_init(eaf_lms_client_t *c, const eaf_lms_callbacks_t *cb) {
-    if (!c || !cb || !cb->start || !cb->pcm || !cb->stop || !cb->eof)
+    if (!c || !cb || (!cb->start && !cb->start_buffered) || !cb->pcm || !cb->stop || !cb->eof ||
+        ((cb->start_buffered != NULL) != (cb->release != NULL)))
         return EAF_INVALID;
     *c = (eaf_lms_client_t){.callbacks = *cb};
     eaf_lms_parser_init(&c->parser, command, c);
@@ -174,7 +210,7 @@ int eaf_lms_client_init(eaf_lms_client_t *c, const eaf_lms_callbacks_t *cb) {
 }
 int eaf_lms_client_connect(eaf_lms_client_t *c, uint32_t server, uint16_t port,
                            const uint8_t mac[6]) {
-    if (!c || !mac || !c->callbacks.start || c->control.open)
+    if (!c || !mac || (!c->callbacks.start && !c->callbacks.start_buffered) || c->control.open)
         return EAF_INVALID;
     c->diagnostics = (eaf_lms_diagnostics_t){0};
     c->stage = EAF_LMS_STAGE_CONNECT;
@@ -284,14 +320,47 @@ static int decode(eaf_lms_client_t *c, const uint8_t *p, size_t n) {
     }
     return EAF_OK;
 }
-static int pump_http(eaf_lms_client_t *c) {
-    if (!c->streaming || !c->http.open)
+/* Ready means actual accepted PCM reserve (or fully delivered short EOF).
+   Startup PCM is writable only because the buffer-aware callback holds output. */
+static int service_buffered(eaf_lms_client_t *c) {
+    if (!c->buffered_output || c->wait_cont ||
+        (c->prefill_frames < c->buffer_limits.ready_frames && !c->input_eof))
         return EAF_OK;
-    /* Headers must reach the server before cont. Keep at most one decoded chunk
-       privately until both gates open; never publish PCM while waiting. */
+    if (c->wait_start && !c->ready_sent) {
+        int rc = status(c, "STMl", 0);
+        if (rc)
+            return rc;
+        c->ready_sent = true;
+        c->step_progress = true;
+    }
+    if (!c->wait_start && !c->output_paused && !c->output_released) {
+        c->stage = EAF_LMS_STAGE_OUTPUT_START;
+        int rc = c->callbacks.release(c->callbacks.ctx);
+        if (rc)
+            return rc;
+        c->output_released = true;
+        c->step_progress = true;
+    }
+    if (c->input_eof && c->output_released && !c->eof_sent) {
+        int rc = status(c, "STMd", 0);
+        if (rc)
+            return rc;
+        c->eof_sent = true;
+        c->step_progress = true;
+    }
+    return EAF_OK;
+}
+static int pump_http(eaf_lms_client_t *c) {
+    if (!c->streaming)
+        return EAF_OK;
+    int service_rc = service_buffered(c);
+    if (service_rc || !c->http.open)
+        return service_rc;
+    /* Headers must reach the server before cont. Legacy callbacks retain one
+       private chunk until start; buffer-aware callbacks can prefill held output. */
     if (c->headers_done && c->wait_cont)
         return EAF_OK;
-    if (c->headers_done && c->wait_start && (c->pcm_count || c->body_done)) {
+    if (!c->buffered_output && c->headers_done && c->wait_start && (c->pcm_count || c->body_done)) {
         if (!c->ready_sent) {
             int rc = status(c, "STMl", 0);
             if (rc)
@@ -310,6 +379,11 @@ static int pump_http(eaf_lms_client_t *c) {
             return EAF_INVALID;
         c->pcm_sent += wrote;
         c->diagnostics.pcm_frames += wrote;
+        if (c->buffered_output && !c->output_released) {
+            if (wrote > c->buffer_limits.capacity_frames - c->prefill_frames)
+                return EAF_INVALID;
+            c->prefill_frames += wrote;
+        }
         c->step_progress |= wrote != 0;
         if (wrote < left) {
             ++c->diagnostics.backpressure;
@@ -325,8 +399,9 @@ static int pump_http(eaf_lms_client_t *c) {
             return EAF_INVALID;
         c->step_progress = true;
         c->callbacks.eof(c->callbacks.ctx);
+        c->input_eof = true;
         hal_tcp_close(&c->http);
-        return status(c, "STMd", 0);
+        return c->buffered_output ? service_buffered(c) : status(c, "STMd", 0);
     }
     size_t n = 0;
     if (c->request_sent < c->request_used) {
@@ -378,10 +453,12 @@ static int pump_http(eaf_lms_client_t *c) {
     return decode(c, c->rx + i, n - i);
 }
 int eaf_lms_client_step(eaf_lms_client_t *c) {
-    if (!c || !c->control.open)
+    if (!c)
         return EAF_STATE;
     c->step_progress = false;
     c->step_backpressure = false;
+    if (!c->control.open)
+        return EAF_STATE;
     size_t n = 0;
     int rc = 0;
     if (c->tx_sent < c->tx_used) {

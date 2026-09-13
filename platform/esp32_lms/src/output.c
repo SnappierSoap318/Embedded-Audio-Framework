@@ -88,6 +88,11 @@ static void consume(void *ctx) {
 static int pause_output(void *ctx, bool paused) {
     (void)ctx;
     hal_atomic_set(&pause_request, paused ? 1u : 0u);
+    /* Before initial release the worker cannot touch graph or sink yet. */
+    if (!hal_atomic_get(&run_gate)) {
+        hal_atomic_set(&pause_ack, paused ? 1u : 0u);
+        return EAF_OK;
+    }
     uint64_t deadline = hal_monotonic_time_us() + 1500000u;
     while (hal_atomic_get(&pause_ack) != (paused ? 1u : 0u) && !hal_atomic_get(&done)) {
         if (hal_monotonic_time_us() > deadline)
@@ -118,7 +123,7 @@ static void stop(void *ctx) {
     }
     active = false;
 }
-static int start(void *ctx, const eaf_format_t *fmt) {
+static int start_common(void *ctx, const eaf_format_t *fmt, uint32_t watermark, bool held) {
     (void)ctx;
     if (active || audio.impl || pipeline.state != EAF_UNINITIALIZED)
         return EAF_STATE;
@@ -128,7 +133,7 @@ static int start(void *ctx, const eaf_format_t *fmt) {
     input_channels = fmt->num_channels;
     eaf_pipeline_config_t config = {&reservoir, nodes, 2, sink};
     int rc = eaf_reservoir_init(&reservoir, storage, CAPACITY,
-                                (eaf_format_t){fmt->sample_rate, 2, 3}, 1024);
+                                (eaf_format_t){fmt->sample_rate, 2, 3}, watermark);
     if (!rc)
         rc = eaf_pipeline_init(&pipeline, &config);
     if (!rc)
@@ -169,9 +174,33 @@ static int start(void *ctx, const eaf_format_t *fmt) {
         stop(NULL); /* quit releases a still-gated worker; no PCM can be processed. */
         return rc;
     }
-    hal_atomic_set(&run_gate, 1);
+    hal_atomic_set(&run_gate, held ? 0u : 1u);
     board_log("Stream: %u Hz, %u channels", fmt->sample_rate, (unsigned)fmt->num_channels);
     return 0;
+}
+static int start(void *ctx, const eaf_format_t *fmt) {
+    return start_common(ctx, fmt, CAPACITY * 3u / 4u, false);
+}
+static int start_buffered(void *ctx, const eaf_format_t *fmt,
+                          const eaf_lms_buffer_request_t *request,
+                          eaf_lms_buffer_limits_t *limits) {
+    int rc = eaf_lms_buffer_limits(fmt, request, CAPACITY, CAPACITY * 3u / 4u, limits);
+    if (rc)
+        return rc;
+    board_log("Buffer request=%u B/%u ms ready=%u/%u frames clamped=%u", request->stream_bytes,
+              request->output_ms, limits->ready_frames, limits->capacity_frames,
+              limits->clamped ? 1u : 0u);
+    return start_common(ctx, fmt, limits->ready_frames, true);
+}
+static int release_output(void *ctx) {
+    (void)ctx;
+    if (!active || hal_atomic_get(&failed))
+        return EAF_STATE;
+    hal_atomic_set(&pause_request, 0);
+    hal_atomic_set(&pause_ack, 0);
+    hal_atomic_set(&run_gate, 1);
+    board_log("Output released after prefill");
+    return EAF_OK;
 }
 static uint32_t pcm(void *ctx, const int32_t *samples, uint32_t frames) {
     (void)ctx;
@@ -200,7 +229,9 @@ eaf_lms_callbacks_t board_output_callbacks(void) {
                                  .eof = eof,
                                  .stop = stop,
                                  .pause = pause_output,
-                                 .volume = set_volume};
+                                 .volume = set_volume,
+                                 .start_buffered = start_buffered,
+                                 .release = release_output};
 }
 bool board_output_failed(void) {
     return hal_atomic_get(&failed) != 0;

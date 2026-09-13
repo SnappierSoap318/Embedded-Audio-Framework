@@ -93,6 +93,8 @@ attempting synchronized playback; the underlying T tasks below remain open.
 - [ ] **R2 — Buffer readiness:** parse stream/output thresholds, define feasible
   WROOM start/rebuffer policy and short-EOF behavior. Add compact ingress storage
   only if measured jitter/memory accounting justifies it (T06/T07/T11).
+  Software threshold conversion, capacity clamping, held prefill and short EOF
+  are implemented and regression-tested; physical jitter/long-play gates remain.
 - [ ] **R3 — Standalone lifecycle:** distinguish decode completion, output starvation
   and final drain; complete truthful STAT fields and bounded progress watchdogs.
   Test early next-track arrival, half-open connections and server restart (T10–T12).

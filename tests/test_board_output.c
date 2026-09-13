@@ -53,5 +53,27 @@ int main(void) {
     CHECK(!cb.start(NULL, &stereo));
     cb.stop(NULL); /* Cancellation while prebuffering. */
     CHECK(!active && !board_output_failed());
+    eaf_lms_buffer_request_t request = {0, 0, 2};
+    eaf_lms_buffer_limits_t limits;
+    CHECK(!cb.start_buffered(NULL, &stereo, &request, &limits));
+    CHECK(limits.capacity_frames == 4096 && limits.ready_frames == 3072 && !limits.clamped);
+    CHECK(!hal_atomic_get(&run_gate));
+    CHECK(!cb.pause(NULL, true));
+    CHECK(!cb.pause(NULL, false));
+    CHECK(!hal_atomic_get(&run_gate));
+    CHECK(cb.pcm(NULL, channels, 2) == 2);
+    cb.eof(NULL);
+    hal_sleep_ms(10);
+    CHECK(!hal_atomic_get(&done));
+    CHECK(!cb.release(NULL));
+    wait_done();
+    CHECK(reservoir.frames_read == 2 && !reservoir.underruns);
+    cb.stop(NULL);
+    request.stream_bytes = 255u * 1024u;
+    request.output_ms = 25500;
+    CHECK(!cb.start_buffered(NULL, &stereo, &request, &limits));
+    CHECK(limits.ready_frames == 4096 && limits.clamped);
+    cb.stop(NULL); /* Cancellation while the worker is held. */
+    CHECK(!active && !audio.impl && !board_output_failed());
     return 0;
 }

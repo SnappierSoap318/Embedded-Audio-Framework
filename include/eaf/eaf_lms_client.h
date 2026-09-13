@@ -3,6 +3,19 @@
 #include <eaf/eaf_net.h>
 #define EAF_LMS_PCM_FRAMES 512u
 typedef struct {
+    uint32_t stream_bytes, output_ms;
+    uint8_t sample_bytes;
+} eaf_lms_buffer_request_t;
+typedef struct {
+    uint32_t capacity_frames, ready_frames;
+    bool clamped;
+} eaf_lms_buffer_limits_t;
+/* Convert both threshold units to source frames; clamp to real output capacity.
+   preferred_frames is the platform's minimum startup/rebuffer reserve. */
+int eaf_lms_buffer_limits(const eaf_format_t *format, const eaf_lms_buffer_request_t *request,
+                          uint32_t capacity_frames, uint32_t preferred_frames,
+                          eaf_lms_buffer_limits_t *limits);
+typedef struct {
     /* Called on transport thread, BEFORE any PCM for the new track. Must arrange
        quiescent graph configure/start and return only when the producer may write. */
     int (*start)(void *, const eaf_format_t *);
@@ -17,6 +30,14 @@ typedef struct {
     /* Optional stereo master gain, Q1.31 [0, INT32_MAX], exact unity at INT32_MAX.
        Transport thread must hand off to the audio owner, not mutate live DSP. */
     int (*volume)(void *, int32_t left, int32_t right);
+    /* Optional pair, replaces start for buffer-aware platforms. start_buffered
+       prepares a writable PCM reservoir with its audio consumer HELD. Return
+       actual finite capacity/readiness. PCM/EOF may arrive before release, but
+       never before cont. release starts consumption; both callbacks are owned
+       by the transport thread. A failed start must unwind its own resources. */
+    int (*start_buffered)(void *, const eaf_format_t *, const eaf_lms_buffer_request_t *,
+                          eaf_lms_buffer_limits_t *);
+    int (*release)(void *);
 } eaf_lms_callbacks_t;
 typedef struct {
     uint32_t elapsed_ms, buffer_bytes, queued_bytes;
@@ -70,6 +91,9 @@ typedef struct {
     eaf_lms_stage_t stage;
     uint8_t opcode[4];
     bool step_progress, step_backpressure;
+    bool buffered_output, output_released, output_paused, input_eof, eof_sent;
+    uint32_t prefill_frames;
+    eaf_lms_buffer_limits_t buffer_limits;
 } eaf_lms_client_t;
 int eaf_lms_client_init(eaf_lms_client_t *c, const eaf_lms_callbacks_t *callbacks);
 int eaf_lms_client_connect(eaf_lms_client_t *c, uint32_t server, uint16_t port,

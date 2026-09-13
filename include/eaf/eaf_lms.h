@@ -3,7 +3,7 @@
 #define EAF_LMS_MAX_PACKET 2048u
 typedef struct {
     uint8_t command, autostart, codec, sample_size, sample_rate, channels, endianness;
-    uint8_t flags;
+    uint8_t flags, threshold_kib, output_threshold_ds;
     uint32_t replay_gain, server_ipv4;
     uint16_t server_port;
     const uint8_t *request;

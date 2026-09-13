@@ -75,7 +75,7 @@ change. Then test AP loss and server restart while retaining serial logs.
 The LMS/main thread is the sole producer and graph lifecycle owner. It creates a
 gated audio worker before START; the worker processes 128-frame blocks at Zephyr
 priority 3, above main's priority 5. The stereo reservoir holds 4096 Q31 frames
-(32 KiB), with a 1024-frame prebuffer. Gain updates use a bounded atomic mailbox;
+(32 KiB), with a preferred 3072-frame prebuffer. Gain updates use a bounded atomic mailbox;
 pause is acknowledged by the audio worker and drains queued I2S blocks without
 resetting the reservoir. Failed output cleanup halts reconnect to preserve owned
 resources; inspect UART and reset after an output fault.
@@ -142,3 +142,16 @@ would-block/backpressure counts, budget yields and minimum queued PCM frames aft
 source playback begins. The first failure's numeric stage and opcode bytes survive
 close; stage names are declared in `eaf_lms_stage_t`. HAL socket errors remain EAF
 codes rather than OS errno values. No physical throughput result is implied.
+
+R2 holds the output worker while filling that reservoir. SlimProto stream
+thresholds (KiB of source PCM) and output thresholds (tenths of a second) are
+converted to frames, rounded up, and combined with the 3072-frame preference.
+Requests exceeding 4096 frames are clamped and logged. The chosen watermark also
+controls recovery after an underrun. At 48 kHz the preferred reserve is 64 ms;
+this is a bounded WROOM policy, not a guarantee against longer network stalls.
+Short or empty EOF qualifies for release without reaching the watermark.
+`cont` still gates PCM publication, and server-controlled start waits for `u`;
+`STMl` reflects accepted reserve or short EOF. Pause and stop work while held.
+No additional ingress ring or task is allocated. Existing underrun-tail handling
+and completion/synchronization limitations remain for R3–R5. Physical long-play
+and controlled network-gap tests are still required before closing R1/R2.

@@ -54,6 +54,8 @@ int eaf_lms_parse_stream(const uint8_t *p, size_t length, eaf_lms_stream_t *out)
                               .channels = p[9],
                               .endianness = p[10],
                               .flags = p[15],
+                              .threshold_kib = p[11],
+                              .output_threshold_ds = p[16],
                               .replay_gain = be32(p + 18),
                               .server_port = (uint16_t)((uint16_t)p[22] * 256u + p[23]),
                               .server_ipv4 = be32(p + 24),

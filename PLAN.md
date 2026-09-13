@@ -204,3 +204,24 @@ minimum is sampled by the audio owner and exported atomically. Regression covers
 all accepted PCM rates/widths/channel counts, fragmented input/output, zero-space
 backpressure, control STOP fairness and first-error retention. Physical sustainable
 throughput and long-play qualification still gate R1 completion.
+
+## R2 bounded buffer readiness
+
+The optional paired LMS `start_buffered`/`release` callbacks prepare a writable
+reservoir with its worker held. The board converts both wire thresholds to source
+frames, takes the maximum with 3072 preferred frames, and clamps to its 4096-frame
+capacity. No new ring or thread is required. The same watermark governs reservoir
+rebuffering. All autostart/cont modes retain their gates; short and empty EOF can
+qualify readiness, and stop/pause are supported during prefill. Legacy `start`
+callbacks retain their existing behavior (including the Linux player).
+
+Regressions cover fragmented input, oversized requests, server-controlled release,
+short/empty EOF, pause/resume and cancellation of the real held output worker.
+Hardware jitter and long-play validation remain open; R3 lifecycle and timed sync
+are not implemented by this change.
+
+R2 validation: all 23 native ASan/UBSan tests passed; ThreadSanitizer passed
+`board_output`, `board_log` and `lms_pump`. Clang checks passed 42 native and 19
+Zephyr translation units. ESP32 I2S and null images built with PSRAM disabled.
+These are build/software results; this stage has not been flashed or measured
+on the amplifier bench.

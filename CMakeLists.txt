@@ -79,7 +79,7 @@ if(BUILD_TESTING)
     add_executable(test_lms_pump tests/test_lms_pump.c)
     target_link_libraries(test_lms_pump PRIVATE eaf)
     target_link_options(test_lms_pump PRIVATE -Wl,--wrap=hal_tcp_recv -Wl,--wrap=hal_tcp_send
-      -Wl,--wrap=hal_tcp_close -Wl,--wrap=hal_monotonic_time_us)
+      -Wl,--wrap=hal_tcp_close -Wl,--wrap=hal_monotonic_time_us -Wl,--wrap=hal_tcp_connect)
     add_test(NAME lms_pump COMMAND test_lms_pump)
     set_tests_properties(lms_pump PROPERTIES TIMEOUT 15)
     add_executable(test_board_output tests/test_board_output.c platform/esp32_lms/src/output_null.c platform/esp32_lms/src/log_buffer.c)
