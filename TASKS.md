@@ -146,7 +146,9 @@ encrypted revision is a separate, later target.
   needs 176 kB/s and Wi-Fi throughput varies 72-175 kB/s, so the 4096-frame
   reservoir starves; mono (`CONFIG_EAF_SOURCE_CHANNELS=1`, ~88 kB/s) plays with
   near-zero underruns and `rx≈88.8 kB/s` while the link holds, but intermittent
-  half-rate dips still break it. Remaining: close the gate on the WROVER profile.
+  half-rate dips still break it. WROOM concluded at its Wi-Fi throughput limit
+  (2026-09-13); Wi-Fi RX buffers / AMPDU BA window were raised and an
+  `EAF_SAMPLE_RATE` fallback added. Remaining: close the gate on the WROVER.
 - [ ] **S04 — Phase 3 WROVER/PSRAM sync quality.** PSRAM jitter buffer
   (`psram.conf`: 65536 frames ≈1.5 s, built at DRAM0 67%), drift correction,
   measured inter-device phase error. Wi-Fi throughput must support real-time
