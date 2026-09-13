@@ -4,11 +4,23 @@
 #include <string.h>
 
 static eaf_sendspin_player_t player;
-static int32_t storage[256];
+static int32_t recorded[512u * 2u];
+static uint32_t recorded_frames;
+static uint32_t sink_limit = UINT32_MAX;
 static uint64_t now;
 
 uint64_t __wrap_hal_monotonic_time_us(void) {
     return now;
+}
+
+static uint32_t record(void *ctx, const int32_t *samples, uint32_t frames) {
+    (void)ctx;
+    if (frames > sink_limit)
+        frames = sink_limit;
+    for (size_t i = 0; i < (size_t)frames * 2u; ++i)
+        recorded[(size_t)recorded_frames * 2u + i] = samples[i];
+    recorded_frames += frames;
+    return frames;
 }
 
 static void put_le16(uint8_t *dst, int16_t value) {
@@ -24,72 +36,64 @@ static eaf_sendspin_stream_start_t make_start(uint8_t channels) {
                                          .bit_depth = 16};
 }
 
-static void pull_two(int32_t *out) {
-    eaf_buffer_t buffer = {.samples = out, .frame_count = 2, .capacity_frames = 2};
-    buffer.capacity_samples = 4;
-    CHECK(!eaf_reservoir_pull(&player.reservoir, &buffer));
-    CHECK(buffer.frame_count == 2);
-}
-
 int main(void) {
     eaf_sendspin_time_filter_t filter;
     eaf_sendspin_time_filter_init(&filter);
     eaf_sendspin_time_filter_update(&filter, 0, 100, 1000000u);
     eaf_sendspin_time_filter_update(&filter, 0, 100, 2000000u);
     CHECK(eaf_sendspin_time_synchronized(&filter));
-
-    eaf_sendspin_player_init(&player, storage, 256u);
     now = 5000000u;
+
+    eaf_sendspin_player_init(&player, record, NULL);
     eaf_sendspin_stream_start_t start = make_start(2);
     CHECK(!eaf_sendspin_player_begin(&player, &filter, &start));
-    CHECK(eaf_sendspin_player_capacity_ms(&player) == 5u);
-    CHECK(eaf_sendspin_player_buffer_bytes(&player) == 1024u);
     CHECK(eaf_sendspin_player_begin(&player, &filter, &start) == EAF_STATE); /* already active */
 
-    /* Prefill past the 3/4 watermark so the reservoir leaves PREBUFFERING. */
-    uint8_t pcm[192u * 4u];
-    memset(pcm, 0, sizeof(pcm));
+    uint8_t pcm[8];
     put_le16(pcm + 0, 1000);
     put_le16(pcm + 2, -1000);
     put_le16(pcm + 4, 2000);
     put_le16(pcm + 6, -2000);
     int64_t future = eaf_sendspin_compute_server_time(&filter, (int64_t)now + 1000000);
     CHECK(!eaf_sendspin_player_write(&player, future, pcm, sizeof(pcm)));
-    CHECK(player.frames_written == 192 && player.frames_dropped == 0 && player.chunks == 1);
-    CHECK(eaf_reservoir_level(&player.reservoir) == 192);
-    int32_t out[4];
-    pull_two(out);
-    CHECK(out[0] == 1000 * 65536 && out[1] == -1000 * 65536);
-    CHECK(out[2] == 2000 * 65536 && out[3] == -2000 * 65536);
-    CHECK(eaf_reservoir_level(&player.reservoir) == 190);
+    CHECK(player.frames_written == 2 && player.frames_dropped == 0 && player.chunks == 1);
+    CHECK(recorded_frames == 2);
+    CHECK(recorded[0] == 1000 * 65536 && recorded[1] == -1000 * 65536);
+    CHECK(recorded[2] == 2000 * 65536 && recorded[3] == -2000 * 65536);
 
     /* Scheduled in the past: dropped without conversion. */
     int64_t past = eaf_sendspin_compute_server_time(&filter, (int64_t)now - 1000000);
     CHECK(!eaf_sendspin_player_write(&player, past, pcm, sizeof(pcm)));
-    CHECK(player.frames_written == 192 && player.frames_dropped == 192 && player.chunks == 2);
-    CHECK(eaf_reservoir_level(&player.reservoir) == 190);
+    CHECK(player.frames_written == 2 && player.frames_dropped == 2 && player.chunks == 2);
+    CHECK(recorded_frames == 2);
 
+    /* Backpressured sink drops the unaccepted remainder. */
+    sink_limit = 1;
+    CHECK(!eaf_sendspin_player_write(&player, future, pcm, sizeof(pcm)));
+    CHECK(player.frames_written == 3 && player.frames_dropped == 3 && recorded_frames == 3);
+    sink_limit = UINT32_MAX;
     eaf_sendspin_player_finish(&player);
     CHECK(!player.active);
 
-    /* Mono is expanded to stereo; smaller capacity lowers the watermark. */
-    eaf_sendspin_player_init(&player, storage, 8u);
+    /* Mono is expanded to stereo. */
+    recorded_frames = 0;
+    eaf_sendspin_player_init(&player, record, NULL);
     eaf_sendspin_stream_start_t mono = make_start(1);
     CHECK(!eaf_sendspin_player_begin(&player, &filter, &mono));
-    uint8_t one[6u * 2u];
-    memset(one, 0, sizeof(one));
+    uint8_t one[2];
     put_le16(one, 3000);
-    future = eaf_sendspin_compute_server_time(&filter, (int64_t)now + 1000000);
     CHECK(!eaf_sendspin_player_write(&player, future, one, sizeof(one)));
-    CHECK(player.frames_written == 6);
-    pull_two(out);
-    CHECK(out[0] == 3000 * 65536 && out[1] == 3000 * 65536);
+    CHECK(player.frames_written == 1 && recorded_frames == 1);
+    CHECK(recorded[0] == 3000 * 65536 && recorded[1] == 3000 * 65536);
     eaf_sendspin_player_finish(&player);
 
-    /* Unsupported format is rejected. */
+    /* Unsupported format and invalid arguments. */
     eaf_sendspin_stream_start_t bad = make_start(2);
     bad.bit_depth = 24;
     CHECK(eaf_sendspin_player_begin(&player, &filter, &bad) == EAF_UNSUPPORTED);
+    eaf_sendspin_player_t no_sink;
+    eaf_sendspin_player_init(&no_sink, NULL, NULL);
+    CHECK(eaf_sendspin_player_begin(&no_sink, &filter, &start) == EAF_INVALID);
     puts("sendspin player PASS");
     return 0;
 }

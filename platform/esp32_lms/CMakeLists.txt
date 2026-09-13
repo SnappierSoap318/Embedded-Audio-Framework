@@ -16,9 +16,9 @@ target_sources(app PRIVATE src/main.c src/output.c src/credentials.c src/log_buf
 target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/board_output.c)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output)
 if(CONFIG_EAF_BOARD_I2S)
-  target_sources(app PRIVATE src/output_i2s.c)
+  target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/sink_i2s.c)
 else()
-  target_sources(app PRIVATE src/output_null.c)
+  target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/sink_null.c)
 endif()
 
 target_include_directories(app SYSTEM PRIVATE ${ZEPHYR_BASE}/include)

@@ -1,7 +1,8 @@
-#include "output.h"
+#include "board_output.h"
 #include <eaf/eaf_sink_i2s.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+
 eaf_sink_t *board_sink(void) {
     return &eaf_zephyr_i2s_sink;
 }

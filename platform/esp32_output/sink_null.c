@@ -1,8 +1,10 @@
-#include "output.h"
+#include "board_output.h"
 #include <eaf/eaf_sink_null.h>
+
 static eaf_null_sink_ctx_t context;
 static eaf_sink_t sink = {&eaf_null_sink_ops, &context};
 static uint64_t paused_at;
+
 eaf_sink_t *board_sink(void) {
     return &sink;
 }

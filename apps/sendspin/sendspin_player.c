@@ -6,30 +6,25 @@ static int16_t read_le16(const uint8_t *p) {
     return (int16_t)value;
 }
 
-void eaf_sendspin_player_init(eaf_sendspin_player_t *player, int32_t *storage,
-                              uint32_t capacity_frames) {
-    *player = (eaf_sendspin_player_t){.storage = storage, .capacity_frames = capacity_frames};
+void eaf_sendspin_player_init(eaf_sendspin_player_t *player, eaf_sendspin_sink_fn sink,
+                              void *sink_ctx) {
+    *player = (eaf_sendspin_player_t){.sink = sink, .sink_ctx = sink_ctx};
 }
 
 int eaf_sendspin_player_begin(eaf_sendspin_player_t *player,
                               const eaf_sendspin_time_filter_t *filter,
                               const eaf_sendspin_stream_start_t *start) {
-    if (!player || !filter || !start)
+    if (!player || !filter || !start || !player->sink)
         return EAF_INVALID;
     if (player->active)
         return EAF_STATE;
     if (start->codec != EAF_SENDPIN_CODEC_PCM || start->bit_depth != 16u ||
         (start->channels != 1u && start->channels != 2u) || start->sample_rate == 0u)
         return EAF_UNSUPPORTED;
-    eaf_format_t format = {.sample_rate = start->sample_rate,
-                           .num_channels = 2,
-                           .channel_mask = EAF_CH_FRONT_LEFT | EAF_CH_FRONT_RIGHT};
-    int rc = eaf_reservoir_init(&player->reservoir, player->storage, player->capacity_frames,
-                                format, player->capacity_frames * 3u / 4u);
-    if (rc)
-        return rc;
     player->filter = filter;
-    player->format = format;
+    player->format = (eaf_format_t){.sample_rate = start->sample_rate,
+                                    .num_channels = 2,
+                                    .channel_mask = EAF_CH_FRONT_LEFT | EAF_CH_FRONT_RIGHT};
     player->input_channels = start->channels;
     player->active = true;
     player->synchronized = false;
@@ -72,7 +67,7 @@ int eaf_sendspin_player_write(eaf_sendspin_player_t *player, int64_t server_time
             scratch[(size_t)2u * i] = eaf_pcm16_to_q31(left);
             scratch[(size_t)2u * i + 1u] = eaf_pcm16_to_q31(right);
         }
-        uint32_t written = eaf_reservoir_write(&player->reservoir, scratch, count);
+        uint32_t written = player->sink(player->sink_ctx, scratch, count);
         player->frames_written += written;
         if (written < count) {
             player->frames_dropped += count - written;
@@ -85,18 +80,7 @@ int eaf_sendspin_player_write(eaf_sendspin_player_t *player, int64_t server_time
 }
 
 void eaf_sendspin_player_finish(eaf_sendspin_player_t *player) {
-    if (!player || !player->active)
+    if (!player)
         return;
-    eaf_reservoir_finish(&player->reservoir);
     player->active = false;
-}
-
-uint32_t eaf_sendspin_player_capacity_ms(const eaf_sendspin_player_t *player) {
-    if (!player || !player->format.sample_rate)
-        return 0;
-    return (uint32_t)((uint64_t)player->capacity_frames * 1000u / player->format.sample_rate);
-}
-
-uint32_t eaf_sendspin_player_buffer_bytes(const eaf_sendspin_player_t *player) {
-    return player ? player->capacity_frames * 2u * 2u : 0u;
 }
