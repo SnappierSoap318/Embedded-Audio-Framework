@@ -125,17 +125,18 @@ int main(void) {
                 const eaf_lms_diagnostics_t *d = &client.diagnostics;
                 uint64_t span = (uint64_t)(now - previous_diagnostic);
                 uint64_t rate = span ? (d->http_bytes - previous_bytes) * 1000u / span : 0;
-                board_log("RX=%llu B/s total=%llu again=%u backpressure=%u budget=%u",
-                          (unsigned long long)rate, (unsigned long long)d->http_bytes,
-                          d->recv_again, d->backpressure, d->budget_yields);
-                board_log("Output queued=%u min_frames=%u played_ms=%u underruns=%u failed=%u",
-                          active ? snapshot.queued_bytes : 0u, board_output_queue_min(),
-                          active ? snapshot.elapsed_ms : 0u, board_output_underruns(),
-                          board_output_failed() ? 1u : 0u);
-                board_log("Worker flags=%u calls=%u HTTP=%u eof=%u gates=%u/%u",
-                          board_output_flags(), board_output_process_calls(),
-                          client.http.open ? 1u : 0u, client.input_eof ? 1u : 0u,
-                          client.wait_cont ? 1u : 0u, client.wait_start ? 1u : 0u);
+                board_log_memory("RX=%llu B/s total=%llu again=%u backpressure=%u budget=%u",
+                                 (unsigned long long)rate, (unsigned long long)d->http_bytes,
+                                 d->recv_again, d->backpressure, d->budget_yields);
+                board_log_memory(
+                    "Output queued=%u min_frames=%u played_ms=%u underruns=%u failed=%u",
+                    active ? snapshot.queued_bytes : 0u, board_output_queue_min(),
+                    active ? snapshot.elapsed_ms : 0u, board_output_underruns(),
+                    board_output_failed() ? 1u : 0u);
+                board_log_memory("Worker flags=%u calls=%u HTTP=%u eof=%u gates=%u/%u",
+                                 board_output_flags(), board_output_process_calls(),
+                                 client.http.open ? 1u : 0u, client.input_eof ? 1u : 0u,
+                                 client.wait_cont ? 1u : 0u, client.wait_start ? 1u : 0u);
                 previous_bytes = d->http_bytes;
                 previous_diagnostic = now;
                 diagnostic = now + 5000;

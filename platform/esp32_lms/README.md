@@ -167,3 +167,11 @@ and wait-cont/wait-start respectively. Pause callback requests are logged explic
 A full queue with unchanged calls and flags=3 warrants sink/worker investigation;
 a full queue with flags=15 reflects a requested pause. Neither implies a proven
 hardware or network cause by itself.
+
+Periodic RX/output/worker telemetry is stored only in the bounded memory history;
+it no longer prints synchronously to UART. Startup, stream lifecycle and errors
+still appear on UART. For the logging comparison, play the same unsynchronized
+track with the diagnostics browser tab closed for 20–30 seconds, then reopen it
+and save the history. Compare receive rate, underrun growth and worker progress.
+The 24-line history overwrites older entries; fetching it does not clear it.
+This removes periodic UART writes, not formatting or HTTP polling overhead.

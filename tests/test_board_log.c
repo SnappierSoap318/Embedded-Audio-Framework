@@ -1,7 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
 #include "../platform/esp32_lms/src/diagnostics.h"
 #include "check.h"
 #include <eaf/eaf_hal.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 static atomic_bool finished;
 static void writer(void *ctx) {
     (void)ctx;
@@ -11,6 +14,25 @@ static void writer(void *ctx) {
 }
 int main(void) {
     char buffer[4096];
+    CHECK(!fflush(stdout));
+    int saved_stdout = dup(STDOUT_FILENO);
+    FILE *capture = tmpfile();
+    CHECK(saved_stdout >= 0 && capture);
+    CHECK(dup2(fileno(capture), STDOUT_FILENO) >= 0);
+    board_log_memory("memory-only-%u", 123u);
+    CHECK(!fflush(stdout));
+    CHECK(ftell(capture) == 0);
+    CHECK(board_log_read(buffer, sizeof(buffer)) > 0);
+    CHECK(strstr(buffer, "memory-only-123"));
+    board_log("uart-event-%u", 456u);
+    CHECK(!fflush(stdout));
+    CHECK(ftell(capture) > 0);
+    CHECK(!fseek(capture, 0, SEEK_SET));
+    CHECK(fgets(buffer, sizeof(buffer), capture));
+    CHECK(strstr(buffer, "uart-event-456"));
+    CHECK(dup2(saved_stdout, STDOUT_FILENO) >= 0);
+    CHECK(!close(saved_stdout));
+    CHECK(!fclose(capture));
     for (unsigned i = 0; i < 40; ++i)
         board_log("entry-%02u", i);
     size_t size = board_log_read(buffer, sizeof(buffer));

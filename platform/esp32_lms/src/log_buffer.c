@@ -9,16 +9,13 @@ static char lines[LOG_LINES][LOG_WIDTH];
 static size_t next, count;
 static atomic_flag lock = ATOMIC_FLAG_INIT;
 static atomic_uint dropped;
-void board_log(const char *format, ...) {
+static void log_message(bool uart, const char *format, va_list args) {
     char line[LOG_WIDTH] = {0};
     int prefix = snprintf(line, sizeof(line), "[%llu ms] ",
                           (unsigned long long)(hal_monotonic_time_us() / 1000u));
     if (prefix < 0 || (size_t)prefix >= sizeof(line))
         return;
-    va_list args;
-    va_start(args, format);
     (void)vsnprintf(line + prefix, sizeof(line) - (size_t)prefix, format, args);
-    va_end(args);
     if (atomic_flag_test_and_set(&lock)) {
         atomic_fetch_add(&dropped, 1u);
         return;
@@ -28,8 +25,20 @@ void board_log(const char *format, ...) {
     if (count < LOG_LINES)
         ++count;
     atomic_flag_clear(&lock);
-    /* UART remains useful before Wi-Fi comes up. No logging in the hot path. */
-    printf("%s\n", line);
+    if (uart)
+        printf("%s\n", line);
+}
+void board_log(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    log_message(true, format, args);
+    va_end(args);
+}
+void board_log_memory(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    log_message(false, format, args);
+    va_end(args);
 }
 size_t board_log_read(char *buffer, size_t capacity) {
     if (!buffer || !capacity)
