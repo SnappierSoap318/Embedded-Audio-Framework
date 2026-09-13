@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "../platform/esp32_lms/src/diagnostics.h"
+#include "../platform/esp32_common/diagnostics.h"
 #include "check.h"
 #include <eaf/eaf_hal.h>
 #include <stdio.h>

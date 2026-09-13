@@ -14,7 +14,10 @@ endif()
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/private)
 target_sources(app PRIVATE src/main.c src/credentials.c)
 target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/board_output.c)
-target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output)
+target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/log_buffer.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/diagnostics.c)
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output
+  ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common)
 if(CONFIG_EAF_BOARD_I2S)
   target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/sink_i2s.c)
 else()

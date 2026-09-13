@@ -1,4 +1,5 @@
 #include "board_config.h"
+#include "diagnostics.h"
 #include <board_output.h>
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_sendspin_client.h>
@@ -26,8 +27,8 @@ static atomic_bool associated;
 static struct wifi_connect_req_params connection;
 static atomic_t chunks;
 
-static void board_log(const char *message) {
-    printk("%s\n", message);
+static void sendspin_output_log(const char *message) {
+    board_log("%s", message);
 }
 
 static uint32_t board_write(void *ctx, const int32_t *samples, uint32_t frames) {
@@ -36,8 +37,8 @@ static uint32_t board_write(void *ctx, const int32_t *samples, uint32_t frames) 
 }
 static void on_ready(void *ctx, const eaf_sendspin_server_hello_t *hello) {
     (void)ctx;
-    printk("Sendspin ready: %.*s player=%d\n", (int)hello->name_length, hello->name,
-           (int)hello->player_active);
+    board_log("Sendspin ready: %.*s player=%d\n", (int)hello->name_length, hello->name,
+              (int)hello->player_active);
 }
 static void on_stream_start(void *ctx, const eaf_sendspin_stream_start_t *start) {
     (void)ctx;
@@ -49,10 +50,10 @@ static void on_stream_start(void *ctx, const eaf_sendspin_stream_start_t *start)
     if (!rc)
         rc = eaf_sendspin_player_begin(&player, &client.filter, start);
     if (rc)
-        printk("Stream start failed rc=%d\n", rc);
+        board_log("Stream start failed rc=%d\n", rc);
     else
-        printk("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
-               start->channels);
+        board_log("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
+                  start->channels);
 }
 static void on_audio(void *ctx, const eaf_sendspin_stream_start_t *format, int64_t timestamp_us,
                      const uint8_t *pcm, size_t length) {
@@ -76,7 +77,7 @@ static void on_command(void *ctx, const eaf_sendspin_server_command_t *command) 
 }
 static void on_disconnect(void *ctx) {
     (void)ctx;
-    printk("Sendspin disconnected\n");
+    board_log("Sendspin disconnected\n");
 }
 
 static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event,
@@ -85,13 +86,13 @@ static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event,
         return;
     if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
         atomic_store(&associated, false);
-        printk("Wi-Fi disconnected\n");
+        board_log("Wi-Fi disconnected\n");
     }
     if (event == NET_EVENT_WIFI_CONNECT_RESULT && cb->info &&
         cb->info_length >= sizeof(struct wifi_status)) {
         const struct wifi_status *status = cb->info;
         atomic_store(&associated, status->status == 0);
-        printk("Wi-Fi association result: %d\n", status->status);
+        board_log("Wi-Fi association result: %d\n", status->status);
     }
 }
 static bool online(void) {
@@ -108,30 +109,31 @@ static int connect_wifi(void) {
     while (!online() && k_uptime_get() < deadline)
         k_sleep(K_MSEC(100));
     if (!online()) {
-        printk("Wi-Fi timeout\n");
+        board_log("Wi-Fi timeout\n");
         return EAF_TIMEOUT;
     }
     char address[NET_IPV4_ADDR_LEN];
     struct in_addr *ip = net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
     if (!ip)
         return EAF_IO;
-    printk("Wi-Fi IPv4: %s\n", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
+    board_log("Wi-Fi IPv4: %s\n", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
 #if defined(CONFIG_WIFI_ESP32) && defined(CONFIG_EAF_BOARD_WIFI_PS_NONE)
-    printk("Wi-Fi power save off rc=%d\n", (int)esp_wifi_set_ps(WIFI_PS_NONE));
+    board_log("Wi-Fi power save off rc=%d\n", (int)esp_wifi_set_ps(WIFI_PS_NONE));
 #endif
     return EAF_OK;
 }
 
 int main(void) {
+    board_diagnostics_start();
     const char *ssid = board_wifi_ssid(), *password = board_wifi_password();
     size_t ssid_length = strlen(ssid), password_length = strlen(password);
     if (!ssid_length || ssid_length > 32 || password_length < 8 || password_length > 63) {
-        printk("Set a 2.4 GHz WPA2 SSID/passphrase in credentials.local.h and rebuild\n");
+        board_log("Set a 2.4 GHz WPA2 SSID/passphrase in credentials.local.h and rebuild\n");
         return 1;
     }
     iface = net_if_get_first_wifi();
     if (!iface) {
-        printk("No Wi-Fi interface\n");
+        board_log("No Wi-Fi interface\n");
         return 1;
     }
     struct in_addr server;
@@ -139,9 +141,9 @@ int main(void) {
         return 1;
 
     eaf_board_output_config_t output_config = {.audio_cpu = CONFIG_EAF_BOARD_AUDIO_CPU,
-                                               .log = board_log};
+                                               .log = sendspin_output_log};
     if (eaf_board_output_init(&output_config)) {
-        printk("Output initialization failed\n");
+        board_log("Output initialization failed\n");
         return 1;
     }
     eaf_sendspin_player_init(&player, board_write, NULL);
@@ -184,26 +186,26 @@ int main(void) {
                                                   .bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ,
                                                   .timeout = 20};
 
-    printk("EAF Sendspin board: server %s:%d\n", CONFIG_EAF_BOARD_SERVER, CONFIG_EAF_BOARD_PORT);
+    board_log("EAF Sendspin board: server %s:%d\n", CONFIG_EAF_BOARD_SERVER, CONFIG_EAF_BOARD_PORT);
     for (;;) {
         int rc = online() ? EAF_OK : connect_wifi();
         if (!rc)
             rc = eaf_sendspin_client_connect(&client, sys_be32_to_cpu(server.s_addr),
                                              (uint16_t)CONFIG_EAF_BOARD_PORT, 3000);
         if (rc) {
-            printk("Sendspin connect failed rc=%d\n", rc);
+            board_log("Sendspin connect failed rc=%d\n", rc);
             k_sleep(K_SECONDS(3));
             continue;
         }
-        printk("Sendspin connected; select this player in Music Assistant\n");
+        board_log("Sendspin connected; select this player in Music Assistant\n");
         int64_t report = 0;
         while (!rc && online() && !eaf_board_output_failed()) {
             rc = eaf_sendspin_client_step(&client);
             int64_t now = k_uptime_get();
             if (now >= report) {
-                printk("Sendspin chunks=%u written=%u dropped=%u underruns=%u\n",
-                       (unsigned)atomic_get(&chunks), player.frames_written, player.frames_dropped,
-                       eaf_board_output_underruns());
+                board_log("Sendspin chunks=%u written=%u dropped=%u underruns=%u\n",
+                          (unsigned)atomic_get(&chunks), player.frames_written,
+                          player.frames_dropped, eaf_board_output_underruns());
                 report = now + 5000;
             }
             k_sleep(K_MSEC(2));
@@ -212,7 +214,7 @@ int main(void) {
         eaf_sendspin_player_finish(&player);
         eaf_board_output_stop();
         if (eaf_board_output_failed()) {
-            printk("Output failure: playback stopped\n");
+            board_log("Output failure: playback stopped\n");
             return 1;
         }
         if (!online()) {

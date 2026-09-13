@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 source = (Path(__file__).resolve().parent.parent /
-          'platform/esp32_lms/src/diagnostics.c').read_text()
+          'platform/esp32_common/diagnostics.c').read_text()
 page = source.split('static const char page[] =', 1)[1].split(';\n', 1)[0]
 html = ''.join(ast.literal_eval(s) for s in re.findall(r'"(?:[^"\\]|\\.)*"', page))
 script = html.split('<script>', 1)[1].split('</script>', 1)[0]
