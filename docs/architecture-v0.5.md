@@ -91,11 +91,13 @@ publishes EOF; only the consumer owns pull state and playback counters. A partia
 write leaves the unwritten tail with the producer. Reset requires both endpoints
 to be quiescent, including on track/source changes.
 
-PREBUFFERING emits silence until the high watermark. A short non-EOF pull discards
-its queued tail, emits a 16-frame ramp from the last output sample, then silence.
-UNDERRUN lasts one pull; the next pull re-enters PREBUFFERING. Required block size
-triggers underrun; producer backpressure has separate low/high watermarks and a
-wake callback. No reader may treat consumer-owned counters as an atomic snapshot.
+PREBUFFERING is a startup state: it emits silence until the high watermark. A
+short non-EOF pull in STREAMING preserves the queued frames, fills the remainder
+of the block with a short ramp from the last real sample, and counts an underrun;
+the next pull resumes STREAMING immediately rather than discarding the tail and
+refilling to the watermark. Required block size triggers underrun; producer
+backpressure has separate low/high watermarks and a wake callback. No reader may
+treat consumer-owned counters as an atomic snapshot.
 
 EOF is published after the last successful write. It bypasses the startup
 watermark, preserves the remaining samples, zero-pads the final block and marks

@@ -30,12 +30,23 @@ int main(void) {
         CHECK(out[i * 2 + 1] == src[63] * (int32_t)(15u - i) / 16);
     }
     CHECK(eaf_reservoir_write(&r, src, 16) == 16);
-    CHECK(eaf_reservoir_pull(&r, &b) == 0 && r.state == EAF_RESERVOIR_PREBUFFERING);
-    CHECK(eaf_reservoir_level(&r) == 16 && r.underruns == 1);
-    CHECK(eaf_reservoir_write(&r, src + 32, 8) == 8);
+    /* A mid-stream underrun resumes immediately: the 16 written frames play
+       without refilling to the high watermark, and nothing is discarded. */
     CHECK(eaf_reservoir_pull(&r, &b) == 0 && r.state == EAF_RESERVOIR_STREAMING);
-    CHECK(eaf_reservoir_pull(&r, &b) == 0 && r.underruns == 2);
-    CHECK(eaf_reservoir_level(&r) == 0); /* partial tail discarded */
+    for (size_t i = 0; i < 32; ++i)
+        CHECK(out[i] == src[i]);
+    CHECK(eaf_reservoir_level(&r) == 0 && r.underruns == 1);
+    CHECK(eaf_reservoir_write(&r, src + 32, 8) == 8);
+    /* Partial data is preserved; only the shortfall is ramped with silence. */
+    CHECK(eaf_reservoir_pull(&r, &b) == 0 && r.state == EAF_RESERVOIR_UNDERRUN);
+    for (size_t i = 0; i < 16; ++i)
+        CHECK(out[i] == src[32 + i]);
+    for (size_t i = 0; i < 8; ++i) {
+        CHECK(out[(8u + i) * 2u] == src[46] * (int32_t)(7u - i) / 8);
+        CHECK(out[(8u + i) * 2u + 1u] == src[47] * (int32_t)(7u - i) / 8);
+    }
+    CHECK(r.underruns == 2);
+    CHECK(eaf_reservoir_level(&r) == 0); /* no partial tail discarded */
     eaf_reservoir_reset(&r);
     hal_atomic_set(&r.read_cursor, UINT32_MAX - 7u);
     hal_atomic_set(&r.write_cursor, UINT32_MAX - 7u);

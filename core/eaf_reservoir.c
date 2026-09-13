@@ -87,35 +87,46 @@ int eaf_reservoir_pull(eaf_reservoir_t *r, eaf_buffer_t *buf) {
         return EAF_OK;
     }
     if (r->state == EAF_RESERVOIR_UNDERRUN)
-        r->state = EAF_RESERVOIR_PREBUFFERING;
+        r->state = EAF_RESERVOIR_STREAMING;
     if (r->state == EAF_RESERVOIR_PREBUFFERING && available >= r->high_watermark && available >= n)
         r->state = EAF_RESERVOIR_STREAMING;
-    if (r->state == EAF_RESERVOIR_STREAMING && available >= n) {
-        for (uint32_t i = 0; i < n; ++i) {
+    if (r->state == EAF_RESERVOIR_STREAMING) {
+        uint32_t take = available < n ? available : n;
+        for (uint32_t i = 0; i < take; ++i) {
             size_t slot = (read + i) & (r->capacity - 1u);
             memcpy(buf->samples + (size_t)i * channels, r->storage + slot * channels,
                    channels * sizeof(int32_t));
         }
-        memcpy(r->last, buf->samples + (size_t)(n - 1u) * channels, channels * sizeof(int32_t));
-        hal_atomic_set(&r->read_cursor, read + n);
-        r->frames_read += n;
-        available -= n;
-    } else {
-        memset(buf->samples, 0, (size_t)n * channels * sizeof(int32_t));
-        buf->flags = EAF_FRAME_SILENCE;
-        if (r->state == EAF_RESERVOIR_STREAMING) {
-            uint32_t fade = n < 16u ? n : 16u;
+        if (take < n) {
+            /* Preserve queued frames and pad the shortfall with a short ramp from
+               the last real sample. A mid-stream underrun resumes on the next pull
+               instead of discarding the tail and refilling to the watermark. */
+            int32_t from[EAF_MAX_CHANNELS];
+            if (take)
+                memcpy(from, buf->samples + (size_t)(take - 1u) * channels,
+                       channels * sizeof(int32_t));
+            else
+                memcpy(from, r->last, channels * sizeof(int32_t));
+            memset(buf->samples + (size_t)take * channels, 0,
+                   (size_t)(n - take) * channels * sizeof(int32_t));
+            uint32_t fade = (n - take) < 16u ? (n - take) : 16u;
             for (uint32_t i = 0; i < fade; ++i)
                 for (size_t ch = 0; ch < channels; ++ch)
-                    buf->samples[(size_t)i * channels + ch] =
-                        (int32_t)((int64_t)r->last[ch] * (fade - i - 1u) / fade);
+                    buf->samples[(size_t)(take + i) * channels + ch] =
+                        (int32_t)((int64_t)from[ch] * (int32_t)(fade - i - 1u) / (int32_t)fade);
             memset(r->last, 0, sizeof(r->last));
-            hal_atomic_set(&r->read_cursor, read + available);
-            available = 0;
             r->state = EAF_RESERVOIR_UNDERRUN;
             ++r->underruns;
             buf->flags = EAF_FRAME_UNDERRUN;
+        } else {
+            memcpy(r->last, buf->samples + (size_t)(n - 1u) * channels, channels * sizeof(int32_t));
         }
+        hal_atomic_set(&r->read_cursor, read + take);
+        r->frames_read += take;
+        available -= take;
+    } else {
+        memset(buf->samples, 0, (size_t)n * channels * sizeof(int32_t));
+        buf->flags = EAF_FRAME_SILENCE;
     }
     if (available < r->backpressure_low && r->wake_producer)
         r->wake_producer(r->wake_ctx);
