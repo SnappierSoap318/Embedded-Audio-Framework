@@ -225,3 +225,22 @@ R2 validation: all 23 native ASan/UBSan tests passed; ThreadSanitizer passed
 Zephyr translation units. ESP32 I2S and null images built with PSRAM disabled.
 These are build/software results; this stage has not been flashed or measured
 on the amplifier bench.
+
+## RX window and ingress ring — physical result 2026-09-13
+
+Physical WROOM playback showed HTTP PCM intake stuck near window/RTT: the 8 KiB
+TCP receive window plus a client that stopped reading on output backpressure
+delivered only ~80–140 KB/s of the 176,400 B/s needed for 44.1 kHz/16-bit stereo,
+with 198 underruns in one track. The fix has two parts. The board raises the TCP
+receive window to 16 KiB with a matched RX pbuf pool. The portable LMS client now
+owns a raw source-PCM ingress ring (`EAF_LMS_INGRESS_BYTES`, default 4 KiB, 16 KiB
+on WROOM): the transport keeps draining the socket into the ring while the output
+reservoir is full, so the server's TCP window stays open, and decode sources from
+the ring. This is the audit S05 staging buffer, sized from measured starvation
+rather than the reference's PSRAM-scale values.
+
+After flashing, 44.1 kHz/16-bit stereo sustained 174–177 KB/s, `played_ms` tracked
+wall time (+5000 ms per 5 s), and underruns stayed at 0 for ~50 s then reached 1
+total over ~85 s (`failed=0`). Audible output was not independently verified and
+the destructive underrun-tail policy plus long-play/reconnect gates remain (R4).
+Evidence: docs/bench/wroom-lms-ingress-2026-09-13.md.

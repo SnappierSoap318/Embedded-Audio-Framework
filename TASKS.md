@@ -71,6 +71,9 @@ There is no fixed finish date until these scopes and hardware gates are validate
   Wireless application logs are available on port 80. Qualify the enlarged RX
   pool/window with standalone playback beyond several track lengths, including
   browser polling; retain underrun counts and stalled/recovered request results.
+  One 44.1 kHz/16-bit track reached real-time intake on 2026-09-13 after the
+  RX-window/ingress-ring change; several track lengths, a browser-polling
+  comparison, AP/server restart and automatic recovery remain.
 - [ ] **T08 — Complete Bluetooth board app.** Add controller enable, SDP record,
   pairing/discoverability and bounded notification handoff. Coordinate queue purge,
   decoder reset and source arbitration across start/suspend/release/disconnect.
@@ -88,13 +91,20 @@ attempting synchronized playback; the underlying T tasks below remain open.
 - [ ] **R1 — Intake and evidence:** bounded progress-driven receive pumping,
   first-failure attribution, throughput and queue-minimum counters. Cover accepted
   PCM rates/widths, full-buffer backpressure and bounded control latency (T04/T07/T12).
-  Software pump/counters and deterministic regression are implemented; physical
-  controlled-stream throughput and long-play qualification remain pending.
+  Software pump/counters and deterministic regression are implemented. Physical
+  WROOM 44.1 kHz/16-bit playback after widening the RX window and adding the
+  ingress ring sustained 175-177 KB/s (real-time), advanced played time at
+  +5000 ms per 5 s and held 0 underruns for ~50 s then 1 total over ~85 s,
+  versus 198 across a prior track. See
+  [ingress-ring evidence](docs/bench/wroom-lms-ingress-2026-09-13.md).
+  Multiple track lengths, controlled gaps and a browser-polling comparison remain.
 - [ ] **R2 — Buffer readiness:** parse stream/output thresholds, define feasible
   WROOM start/rebuffer policy and short-EOF behavior. Add compact ingress storage
   only if measured jitter/memory accounting justifies it (T06/T07/T11).
   Software threshold conversion, capacity clamping, held prefill and short EOF
-  are implemented and regression-tested; physical jitter/long-play gates remain.
+  are implemented and regression-tested. Measured starvation justified a compact
+  raw ingress ring (`EAF_LMS_INGRESS_BYTES`, 16 KiB on WROOM), now implemented and
+  physically validated. Underrun-tail policy and long-play gates remain (R4).
 - [ ] **R3 — Standalone lifecycle:** distinguish decode completion, output starvation
   and final drain; complete truthful STAT fields and bounded progress watchdogs.
   Test early next-track arrival, half-open connections and server restart (T10–T12).
