@@ -48,8 +48,13 @@ static int enqueue(eaf_lms_client_t *c, const char opcode[4], const void *body, 
 static int status(eaf_lms_client_t *c, const char event[4], uint32_t timestamp) {
     uint8_t body[53] = {0};
     memcpy(body, event, 4);
+    /* Stream buffer is the raw ingress ring; output buffer is the Q31 reservoir.
+       Jiffies is a monotonic millisecond clock, not a presentation timestamp. */
+    put32(body + 7, EAF_LMS_INGRESS_BYTES);
+    put32(body + 11, (uint32_t)c->ingress_used);
     put32(body + 15, (uint32_t)(c->bytes_received >> 32));
     put32(body + 19, (uint32_t)c->bytes_received);
+    put32(body + 25, (uint32_t)(hal_monotonic_time_us() / 1000u));
     put32(body + 29, c->playback.buffer_bytes);
     put32(body + 33, c->playback.queued_bytes);
     put32(body + 37, c->playback.elapsed_ms / 1000u);
@@ -73,6 +78,7 @@ static void stop_stream(eaf_lms_client_t *c) {
     c->wait_start = false;
     c->ready_sent = false;
     c->started_sent = false;
+    c->starved_sent = c->drained_sent = false;
     c->playback = (eaf_lms_playback_t){0};
     c->bytes_received = 0;
 }
@@ -584,8 +590,29 @@ int eaf_lms_client_report_playback(eaf_lms_client_t *c, const eaf_lms_playback_t
     bool first = p->started && !c->started_sent;
     c->stage = EAF_LMS_STAGE_STATUS;
     int rc = status(c, first ? "STMs" : "STMt", 0);
-    record_error(c, rc);
-    if (!rc && first)
+    if (rc) {
+        record_error(c, rc);
+        return rc;
+    }
+    if (first)
         c->started_sent = true;
+    /* Output lifecycle, once per transition: starved while input continues,
+       drained after decode EOF. Re-armed when the output buffer refills. */
+    if (p->started && p->queued_bytes == 0) {
+        if (c->input_eof) {
+            if (!c->drained_sent) {
+                rc = status(c, "STMu", 0);
+                c->drained_sent = true;
+            }
+        } else if (!c->starved_sent) {
+            rc = status(c, "STMo", 0);
+            c->starved_sent = true;
+        }
+    } else if (p->queued_bytes) {
+        c->starved_sent = false;
+        c->drained_sent = false;
+    }
+    if (rc)
+        record_error(c, rc);
     return rc;
 }

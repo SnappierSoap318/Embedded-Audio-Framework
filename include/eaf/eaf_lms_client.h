@@ -99,6 +99,7 @@ typedef struct {
     unsigned width;
     bool big_endian, headers_done, streaming, body_done, has_length;
     bool wait_cont, wait_start, ready_sent, started_sent;
+    bool starved_sent, drained_sent;
     eaf_lms_playback_t playback;
     uint64_t remaining, bytes_received;
     eaf_lms_diagnostics_t diagnostics;

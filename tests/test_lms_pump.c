@@ -174,6 +174,30 @@ static unsigned event_count(const char *event) {
     }
     return count;
 }
+static uint32_t be32(const uint8_t *p) {
+    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
+}
+static unsigned tx_event_count(const char *event) {
+    unsigned count = 0;
+    for (size_t i = 0; i + 8u <= client.tx_used;) {
+        uint32_t n = be32(client.tx + i + 4u);
+        CHECK(n <= client.tx_used - i - 8u);
+        if (!memcmp(client.tx + i, "STAT", 4) && n >= 4 && !memcmp(client.tx + i + 8u, event, 4))
+            ++count;
+        i += 8u + n;
+    }
+    return count;
+}
+static uint32_t tx_stat_word(const char *event, size_t body_offset) {
+    for (size_t i = 0; i + 8u <= client.tx_used;) {
+        uint32_t n = be32(client.tx + i + 4u);
+        if (!memcmp(client.tx + i, "STAT", 4) && n >= body_offset + 4u &&
+            !memcmp(client.tx + i + 8u, event, 4))
+            return be32(client.tx + i + 8u + body_offset);
+        i += 8u + n;
+    }
+    return 0;
+}
 static void buffering_case(unsigned autostart, unsigned frames, bool oversized, bool paused) {
     setup(3, 2, 48000);
     wire_size = (size_t)frames * 6u;
@@ -302,5 +326,24 @@ int main(void) {
     eaf_lms_client_close(&client);
     CHECK(client.diagnostics.first_error == EAF_IO && stops == 1);
     CHECK(eaf_lms_client_pump(&client, 0, 1000, &result) == EAF_INVALID);
+    /* Output lifecycle: STMo on starvation, STMu after EOF drain, each once. */
+    setup(2, 2, 44100);
+    eaf_lms_playback_t pb = {1000, 4096, 512, true};
+    CHECK(!eaf_lms_client_report_playback(&client, &pb));
+    CHECK(tx_event_count("STMs") == 1 && tx_event_count("STMo") == 0);
+    CHECK(tx_stat_word("STMs", 7) == EAF_LMS_INGRESS_BYTES); /* stream_buffer_size */
+    pb.queued_bytes = 0;
+    CHECK(!eaf_lms_client_report_playback(&client, &pb));
+    CHECK(tx_event_count("STMo") == 1);
+    CHECK(!eaf_lms_client_report_playback(&client, &pb));
+    CHECK(tx_event_count("STMo") == 1); /* no duplicate without a refill */
+    pb.queued_bytes = 512;
+    CHECK(!eaf_lms_client_report_playback(&client, &pb)); /* re-arm */
+    pb.queued_bytes = 0;
+    client.input_eof = true;
+    CHECK(!eaf_lms_client_report_playback(&client, &pb));
+    CHECK(tx_event_count("STMu") == 1);
+    CHECK(!eaf_lms_client_report_playback(&client, &pb));
+    CHECK(tx_event_count("STMu") == 1);
     return 0;
 }
