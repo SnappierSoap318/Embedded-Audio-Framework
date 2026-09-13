@@ -1,5 +1,8 @@
 # Repository audit — 2026-09-11
 
+For the current WROOM streaming investigation, see the
+[2026-09-13 squeezelite-esp32 comparison](streaming-audit-2026-09-13.md).
+
 Baseline: `7114eb3`, following the user-confirmed stereo-volume fix. Reviewed the
 portable core, WAV/player, LMS/SBC transports, Linux/Zephyr HAL and sinks,
 platform examples, build configuration, test coverage and v0.4 design. This is a

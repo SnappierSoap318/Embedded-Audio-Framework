@@ -79,6 +79,26 @@ There is no fixed finish date until these scopes and hardware gates are validate
   driver queue starvation recovery and clean reconfigure. Scope clocks and prove
   DMA ownership/cache correctness on the actual ESP32 driver.
 
+## Streaming stabilization order — current priority
+
+The [2026-09-13 reference audit](docs/streaming-audit-2026-09-13.md) compares
+EAF `e1b7e27` with pinned squeezelite-esp32 source. Work in this order before
+attempting synchronized playback; the underlying T tasks below remain open.
+
+- [ ] **R1 — Intake and evidence:** bounded progress-driven receive pumping,
+  first-failure attribution, throughput and queue-minimum counters. Cover accepted
+  PCM rates/widths, full-buffer backpressure and bounded control latency (T04/T07/T12).
+- [ ] **R2 — Buffer readiness:** parse stream/output thresholds, define feasible
+  WROOM start/rebuffer policy and short-EOF behavior. Add compact ingress storage
+  only if measured jitter/memory accounting justifies it (T06/T07/T11).
+- [ ] **R3 — Standalone lifecycle:** distinguish decode completion, output starvation
+  and final drain; complete truthful STAT fields and bounded progress watchdogs.
+  Test early next-track arrival, half-open connections and server restart (T10–T12).
+- [ ] **R4 — Continuity/interoperability:** explicitly review underrun-tail policy,
+  framing/format negotiation and configurable bench attenuation (T13/T15/T21).
+- [ ] **R5 — Timed sync:** schedule frame/timestamp controls only after presentation
+  accounting and standalone playback are qualified (T19/T20).
+
 ## LMS/transport completeness — P1
 
 - [ ] **T10 — Reference wire corpus.** Add independently documented HELO/STAT/strm/

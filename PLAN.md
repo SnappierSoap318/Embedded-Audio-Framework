@@ -176,3 +176,17 @@ Physical diagnostics previously observed a tiny 272-byte stream and later severe
 slow source progression; neither result establishes an amplifier fault. Sustained
 playback with the revised network budget remains a required gate. Synchronized
 start/pause is unsupported, and the fixed −18 dB bench attenuation remains enabled.
+
+## Reference streaming audit — 2026-09-13
+
+The [streaming comparison](docs/streaming-audit-2026-09-13.md) pins EAF `e1b7e27`
+and squeezelite-esp32 `1d542bd5`. It identifies a definite receive-loop throughput
+ceiling for some accepted 96 kHz formats, small fixed startup reserve, omitted LMS
+thresholds/status/lifecycle events and missing established-connection progress
+recovery. It does not establish the cause of the physical 30-second dropout.
+`TASKS.md` now prioritizes R1–R5: improve bounded intake and evidence first, then
+buffer readiness and standalone lifecycle, before timed sync. Preserve portable
+HAL boundaries, static ownership and checked teardown; reference buffer sizes and
+ESP-IDF scheduling choices are not suitable defaults for no-PSRAM WROOM.
+Five relevant existing sanitizer regressions passed during the audit; sustained
+physical throughput and event-order coverage remain required implementation gates.
