@@ -27,9 +27,9 @@ cmake --build build-wroom-sendspin
 
 Add `-DEXTRA_CONF_FILE=null.conf` for a silent connectivity build. For the
 WROVER PSRAM profile add `-DEXTRA_CONF_FILE=psram.conf` and
-`-DEXTRA_DTC_OVERLAY_FILE=psram.overlay` (copy the LMS profiles) and set
-`CONFIG_EAF_BOARD_USE_PSRAM=y`; the WROOM profile keeps the reservoir in
-internal RAM.
+`-DEXTRA_DTC_OVERLAY_FILE=psram.overlay`, which enables 8 MB SPI RAM and moves a
+65536-frame (~1.5 s) reservoir to the external heap; the WROOM profile keeps the
+4096-frame (~93 ms) reservoir in internal RAM.
 
 ## Behaviour
 
