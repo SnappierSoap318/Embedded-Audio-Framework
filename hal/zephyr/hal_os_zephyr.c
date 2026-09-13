@@ -1,3 +1,4 @@
+#include "cpu_pin.h"
 #include <eaf/eaf_hal.h>
 #include <errno.h>
 #include <zephyr/kernel.h>
@@ -36,10 +37,8 @@ int hal_thread_create_with_options(eaf_thread_t *thread, void (*entry)(void *), 
         (options->role != EAF_THREAD_DECODER && options->role != EAF_THREAD_AUDIO) ||
         options->cpu < -1 || options->cpu >= CONFIG_MP_MAX_NUM_CPUS)
         return EAF_INVALID;
-#ifndef CONFIG_SCHED_CPU_MASK
-    if (options->cpu >= 0)
+    if (options->cpu >= 0 && !hal_zephyr_cpu_pin_available())
         return EAF_UNSUPPORTED;
-#endif
     int priority =
         options->role == EAF_THREAD_AUDIO ? CONFIG_EAF_AUDIO_PRIORITY : CONFIG_EAF_DECODER_PRIORITY;
     for (size_t i = 0; i < CONFIG_EAF_THREAD_COUNT; ++i) {
@@ -55,13 +54,11 @@ int hal_thread_create_with_options(eaf_thread_t *thread, void (*entry)(void *), 
             atomic_clear(&s->busy);
             return EAF_IO;
         }
-#ifdef CONFIG_SCHED_CPU_MASK
-        if (options->cpu >= 0 && k_thread_cpu_pin(id, options->cpu)) {
+        if (options->cpu >= 0 && hal_zephyr_cpu_pin(id, options->cpu)) {
             k_thread_abort(id);
             atomic_clear(&s->busy);
             return EAF_IO;
         }
-#endif
         thread->impl = s;
         k_thread_start(id);
         return EAF_OK;

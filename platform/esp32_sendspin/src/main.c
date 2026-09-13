@@ -1,4 +1,5 @@
 #include "board_config.h"
+#include "board_runtime.h"
 #include "diagnostics.h"
 #include <board_output.h>
 #include <eaf/eaf_hal.h>
@@ -9,9 +10,6 @@
 #include <zephyr/net/net_if.h>
 
 /* dhcpv4.h requires the net_if declaration first. */
-#if defined(CONFIG_WIFI_ESP32)
-#include <esp_wifi.h>
-#endif
 #include <zephyr/net/dhcpv4.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/wifi_mgmt.h>
@@ -168,9 +166,7 @@ static int connect_wifi(void) {
     if (!ip)
         return EAF_IO;
     board_log("Wi-Fi IPv4: %s\n", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
-#if defined(CONFIG_WIFI_ESP32) && defined(CONFIG_EAF_BOARD_WIFI_PS_NONE)
-    board_log("Wi-Fi power save off rc=%d\n", (int)esp_wifi_set_ps(WIFI_PS_NONE));
-#endif
+    board_wifi_power_save_off();
     return EAF_OK;
 }
 

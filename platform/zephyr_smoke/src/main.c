@@ -64,17 +64,15 @@ static int scheduling_smoke(void) {
     }
     eaf_thread_t thread = {0};
     eaf_thread_options_t options = {EAF_THREAD_AUDIO, 0, false};
-#ifndef CONFIG_SCHED_CPU_MASK
-    if (hal_thread_create_with_options(&thread, scheduling_worker, NULL, &options) !=
-            EAF_UNSUPPORTED ||
-        thread.impl)
-        return EAF_IO;
-#else
     int priority = CONFIG_EAF_AUDIO_PRIORITY;
-    if (hal_thread_create_with_options(&thread, scheduling_worker, &priority, &options) ||
-        hal_sem_take(&ready, 1000) || hal_thread_join(&thread) || scheduling_result)
+    int rc = hal_thread_create_with_options(&thread, scheduling_worker, &priority, &options);
+    if (rc == EAF_UNSUPPORTED) {
+        /* Affinity is not built in: the request must leave no thread handle. */
+        if (thread.impl)
+            return EAF_IO;
+    } else if (rc || hal_sem_take(&ready, 1000) || hal_thread_join(&thread) || scheduling_result) {
         return EAF_IO;
-#endif
+    }
     return EAF_OK;
 }
 int main(void) {

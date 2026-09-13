@@ -1,3 +1,4 @@
+#include "board_runtime.h"
 #include "diagnostics.h"
 #include "output.h"
 #include <string.h>
@@ -5,9 +6,6 @@
 #include <zephyr/net/net_if.h>
 
 /* dhcpv4.h requires the net_if declaration first. */
-#if defined(CONFIG_WIFI_ESP32)
-#include <esp_wifi.h>
-#endif
 #include <zephyr/net/dhcpv4.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/wifi_mgmt.h>
@@ -58,9 +56,7 @@ static int connect_wifi(void) {
     if (!ip)
         return EAF_IO;
     board_log("Wi-Fi IPv4: %s", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
-#if defined(CONFIG_WIFI_ESP32) && defined(CONFIG_EAF_BOARD_WIFI_PS_NONE)
-    board_log("Wi-Fi power save off rc=%d", (int)esp_wifi_set_ps(WIFI_PS_NONE));
-#endif
+    board_wifi_power_save_off();
     return EAF_OK;
 }
 static void wifi_health(void) {
@@ -70,9 +66,8 @@ static void wifi_health(void) {
                          (unsigned)status.dtim_period, (unsigned)status.beacon_interval);
 }
 int main(void) {
-#if defined(CONFIG_SCHED_CPU_MASK) && CONFIG_EAF_BOARD_MAIN_CPU >= 0
-    (void)k_thread_cpu_pin(k_current_get(), CONFIG_EAF_BOARD_MAIN_CPU);
-#endif
+    if (CONFIG_EAF_BOARD_MAIN_CPU >= 0)
+        (void)board_cpu_pin(k_current_get(), CONFIG_EAF_BOARD_MAIN_CPU);
     board_diagnostics_start();
     const char *ssid = board_wifi_ssid(), *password = board_wifi_password();
     size_t ssid_length = strlen(ssid), password_length = strlen(password);

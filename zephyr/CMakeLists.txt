@@ -17,6 +17,11 @@ if(CONFIG_EAF)
     ../hal/common/hal_atomic_c11.c ../hal/common/sink_null.c
     ../hal/zephyr/hal_os_zephyr.c ../apps/player/eaf_player.c
     ../apps/decoders/dec_wav.c)
+  if(CONFIG_SCHED_CPU_MASK)
+    zephyr_library_sources(../hal/zephyr/cpu_pin.c)
+  else()
+    zephyr_library_sources(../hal/zephyr/cpu_nopin.c)
+  endif()
   zephyr_library_sources_ifdef(CONFIG_EAF_LMS ../apps/lms/lms_protocol.c)
   zephyr_library_sources_ifdef(CONFIG_EAF_LMS_CLIENT ../apps/lms/lms_client.c)
   if(CONFIG_EAF_LMS_CLIENT OR CONFIG_EAF_SENDPIN)
