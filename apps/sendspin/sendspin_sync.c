@@ -13,7 +13,7 @@ void eaf_sendspin_time_filter_reset(eaf_sendspin_time_filter_t *f) {
     f->last_update = 0;
     f->offset = 0.0;
     f->drift = 0.0;
-    f->offset_covariance = INFINITY;
+    f->offset_covariance = HUGE_VAL;
     f->offset_drift_covariance = 0.0;
     f->drift_covariance = 0.0;
     f->element = (eaf_sendspin_time_element_t){0};

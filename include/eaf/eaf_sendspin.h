@@ -163,14 +163,14 @@ typedef struct {
     int32_t static_delay_ms;
     int32_t required_lead_time_ms;
     int32_t min_buffer_ms;
-} eaf_sendspin_client_state_t;
+} eaf_sendspin_player_state_t;
 
 int eaf_sendspin_build_client_hello(char *dst, size_t capacity,
                                     const eaf_sendspin_client_hello_t *hello, size_t *written);
 int eaf_sendspin_build_client_time(char *dst, size_t capacity, int64_t client_transmitted,
                                    size_t *written);
 int eaf_sendspin_build_client_state(char *dst, size_t capacity,
-                                    const eaf_sendspin_client_state_t *state, size_t *written);
+                                    const eaf_sendspin_player_state_t *state, size_t *written);
 int eaf_sendspin_build_client_goodbye(char *dst, size_t capacity, const char *reason,
                                       size_t *written);
 

@@ -46,7 +46,7 @@ if(EAF_ENABLE_BT_INGRESS)
 endif()
 if(EAF_ENABLE_SENDPIN)
   target_sources(eaf PRIVATE apps/sendspin/sendspin_sync.c apps/sendspin/sendspin_protocol.c
-    apps/sendspin/sendspin_ws.c)
+    apps/sendspin/sendspin_ws.c apps/sendspin/sendspin_client.c)
 endif()
 option(EAF_ENABLE_ALSA "Build optional Linux ALSA output when available" ON)
 if(EAF_ENABLE_ALSA)
@@ -138,6 +138,13 @@ if(BUILD_TESTING)
     target_link_libraries(test_sendspin_ws PRIVATE eaf)
     add_test(NAME sendspin_ws COMMAND test_sendspin_ws)
     set_tests_properties(sendspin_ws PROPERTIES TIMEOUT 30)
+    add_executable(test_sendspin_client tests/test_sendspin_client.c)
+    target_link_libraries(test_sendspin_client PRIVATE eaf)
+    target_link_options(test_sendspin_client PRIVATE -Wl,--wrap=hal_tcp_connect
+      -Wl,--wrap=hal_tcp_send -Wl,--wrap=hal_tcp_recv -Wl,--wrap=hal_tcp_close
+      -Wl,--wrap=hal_monotonic_time_us)
+    add_test(NAME sendspin_client COMMAND test_sendspin_client)
+    set_tests_properties(sendspin_client PROPERTIES TIMEOUT 30)
   endif()
   target_link_options(test_hal_os PRIVATE -Wl,--wrap=sem_clockwait -Wl,--wrap=pthread_create)
   target_link_options(test_graph PRIVATE

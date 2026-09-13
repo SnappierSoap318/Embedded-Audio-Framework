@@ -128,7 +128,7 @@ static void build_messages(void) {
     CHECK(!eaf_sendspin_build_client_time(buffer, sizeof(buffer), 73611376768LL, &written));
     check_wire(buffer, written, client_time_wire);
 
-    eaf_sendspin_client_state_t state = {
+    eaf_sendspin_player_state_t state = {
         .volume = 100, .muted = false, .static_delay_ms = 0, .required_lead_time_ms = 250};
     state.min_buffer_ms = 250;
     CHECK(!eaf_sendspin_build_client_state(buffer, sizeof(buffer), &state, &written));

@@ -633,7 +633,7 @@ int eaf_sendspin_build_client_time(char *dst, size_t capacity, int64_t client_tr
 }
 
 int eaf_sendspin_build_client_state(char *dst, size_t capacity,
-                                    const eaf_sendspin_client_state_t *state, size_t *written) {
+                                    const eaf_sendspin_player_state_t *state, size_t *written) {
     if (!dst || !state || !written || !capacity)
         return EAF_INVALID;
     writer_t w = {dst, capacity, 0, true};
