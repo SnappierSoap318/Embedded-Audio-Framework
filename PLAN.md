@@ -11,6 +11,13 @@ two MAX98357 modules; later WROVER-IE/N16R8 and TAS5805M (exact variants pending
 
 ## Current priority: embedded player, with Linux as a test harness
 
+WROVER/TAS5805M bench update (2026-09-20): direct-boot Sendspin playback is
+audible with PSRAM enabled, stereo 44.1 kHz and working volume control. The
+MCUboot build instead exhausts all four I2S TX buffers (`-EAGAIN`, four successful
+submissions). Keep direct boot as the working baseline; isolate MCUboot/build
+initialization differences before restoring OTA. See
+[the bench report](docs/bench/wrover-i2s-2026-09-20.md).
+
 1. **Zephyr target path (started):** module/Kconfig build, bounded static thread
    and semaphore pools, shared C11 atomics, and stereo I2S TX adapter with four
    aligned static slab blocks. Zephyr 4.3.0 `native_sim/native/64` smoke exercises

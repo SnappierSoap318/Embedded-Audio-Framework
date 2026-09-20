@@ -13,7 +13,18 @@ static struct {
     eaf_buffer_t buffer;
     bool configured, running, started, paused;
     void *held;
+    uint32_t submitted_blocks;
+    void (*error_handler)(const char *operation, int error, uint32_t submitted_blocks);
 } state;
+void eaf_zephyr_i2s_set_error_handler(void (*handler)(const char *operation, int error,
+                                                      uint32_t submitted_blocks)) {
+    state.error_handler = handler;
+}
+static int io_error(const char *operation, int error) {
+    if (state.error_handler)
+        state.error_handler(operation, error, state.submitted_blocks);
+    return EAF_IO;
+}
 int eaf_zephyr_i2s_bind(const char *name) {
     if (!name)
         return EAF_INVALID;
@@ -31,7 +42,7 @@ static int init(eaf_sink_t *sink, const eaf_format_t *fmt, size_t frames) {
         return EAF_INVALID;
     state.device = device_get_binding(state.name);
     if (!state.device || !device_is_ready(state.device))
-        return EAF_IO;
+        return io_error("device ready", -ENODEV);
     struct i2s_config cfg = {.word_size = 32,
                              .channels = 2,
                              .format = I2S_FMT_DATA_FORMAT_I2S,
@@ -40,8 +51,9 @@ static int init(eaf_sink_t *sink, const eaf_format_t *fmt, size_t frames) {
                              .mem_slab = &tx_blocks,
                              .block_size = frames * 2u * sizeof(int32_t),
                              .timeout = 20};
-    if (i2s_configure(state.device, I2S_DIR_TX, &cfg))
-        return EAF_IO;
+    int rc = i2s_configure(state.device, I2S_DIR_TX, &cfg);
+    if (rc)
+        return io_error("configure", rc);
     state.buffer = (eaf_buffer_t){.frame_count = (uint32_t)frames,
                                   .capacity_frames = (uint32_t)frames,
                                   .capacity_samples = frames * 2u,
@@ -55,6 +67,7 @@ static int start(eaf_sink_t *sink) {
         return EAF_STATE;
     /* Zephyr requires a queued block before the hardware START trigger. */
     state.paused = false;
+    state.submitted_blocks = 0;
     state.running = true;
     state.started = false;
     return EAF_OK;
@@ -63,8 +76,9 @@ static int acquire(eaf_sink_t *sink, eaf_buffer_t **buffer) {
     (void)sink;
     if (!state.running || state.paused || state.held || !buffer)
         return EAF_STATE;
-    if (k_mem_slab_alloc(&tx_blocks, &state.held, K_MSEC(20)))
-        return EAF_IO;
+    int rc = k_mem_slab_alloc(&tx_blocks, &state.held, K_MSEC(20));
+    if (rc)
+        return io_error("allocate TX block", rc);
     state.buffer.samples = state.held;
     *buffer = &state.buffer;
     return EAF_OK;
@@ -72,8 +86,9 @@ static int acquire(eaf_sink_t *sink, eaf_buffer_t **buffer) {
 /* Reclaim every DMA slot after DRAIN. This waits for driver ownership release,
    not a measurement of the amplifier's presentation latency. */
 static int drain(void) {
-    if (i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_DRAIN))
-        return EAF_IO;
+    int trigger_rc = i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
+    if (trigger_rc)
+        return io_error("drain", trigger_rc);
     void *blocks[4];
     unsigned count = 0;
     int64_t deadline = k_uptime_get() + 1000;
@@ -82,7 +97,7 @@ static int drain(void) {
             break;
         ++count;
     }
-    int rc = count == 4 ? EAF_OK : EAF_IO;
+    int rc = count == 4 ? EAF_OK : io_error("drain reclaim", -ETIMEDOUT);
     while (count)
         k_mem_slab_free(&tx_blocks, blocks[--count]);
     if (!rc)
@@ -110,21 +125,27 @@ static int commit(eaf_sink_t *sink, eaf_buffer_t *buffer) {
     size_t bytes = (size_t)buffer->frame_count * 2u * sizeof(int32_t);
     int cache_rc = sys_cache_data_flush_range(state.held, bytes);
     if (cache_rc && cache_rc != -ENOTSUP)
-        return EAF_IO;
-    if (i2s_write(state.device, state.held, bytes))
-        return EAF_IO;
+        return io_error("cache flush", cache_rc);
+    int wrc = i2s_write(state.device, state.held, bytes);
+    if (wrc)
+        return io_error("write", wrc);
     state.held = NULL; /* Ownership transferred only on successful write. */
+    ++state.submitted_blocks;
     if (!state.started) {
-        if (i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_START))
-            return EAF_IO;
+        int trc = i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_START);
+        if (trc)
+            return io_error("start", trc);
         state.started = true;
     }
     return (buffer->flags & EAF_FRAME_EOS) ? drain() : EAF_OK;
 }
 static int stop(eaf_sink_t *sink) {
     (void)sink;
-    if (state.configured && i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_DROP))
-        return EAF_IO;
+    if (state.configured) {
+        int rc = i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_DROP);
+        if (rc)
+            return io_error("drop", rc);
+    }
     if (state.held) {
         k_mem_slab_free(&tx_blocks, state.held);
         state.held = NULL;
