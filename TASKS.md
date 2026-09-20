@@ -155,6 +155,19 @@ encrypted revision is a separate, later target.
   stereo; mono remains the WROOM fallback.
 - [ ] **S05 — Phase 4 spec-current encryption/pairing.** Noise `KKpsk2` via
   mbedTLS and pairing, gated on a future MA/spec revision.
+- [ ] **S06 — Selectable audio formats.** Add user-selectable source sample rate
+  and PCM precision, with persisted settings and safe renegotiation/restart.
+  Start with stereo 44.1/48 kHz and PCM16/24/32; retain 44.1 kHz/16-bit as the
+  qualified baseline. Extend capability advertisement, frame sizing and PCM-to-Q1.31
+  conversion beyond PCM16; validate sample boundaries, sign extension and format
+  rejection against independently specified vectors. Configure TAS5805M input
+  word length explicitly to match the 32-bit I2S slots and verify clocks, channel
+  order, gain/headroom and track changes. Display negotiated network format
+  separately from DSP/I2S precision. Qualify 48 kHz/24-bit and 48 kHz/32-bit with
+  sustained throughput/buffer/timing measurements; evaluate 88.2/96 kHz later.
+  TI specifies up to 96 kHz and 32-bit input for TAS5805M, not a 48 kHz ceiling;
+  whole-board support remains a measured gate. Wider containers or upsampling
+  must not be presented as restoring source detail.
 
 ## LMS/transport completeness — P1
 

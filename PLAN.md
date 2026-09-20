@@ -18,6 +18,11 @@ submissions). Keep direct boot as the working baseline; isolate MCUboot/build
 initialization differences before restoring OTA. See
 [the bench report](docs/bench/wrover-i2s-2026-09-20.md).
 
+Selectable audio formats are tracked as S06 in `TASKS.md`: preserve the working
+44.1 kHz/16-bit network baseline, add selectable 44.1/48 kHz PCM16/24/32 with
+explicit amplifier input-word configuration, and qualify 88.2/96 kHz later.
+The existing Q1.31 DSP and 32-bit I2S slots do not imply 32-bit source precision.
+
 1. **Zephyr target path (started):** module/Kconfig build, bounded static thread
    and semaphore pools, shared C11 atomics, and stereo I2S TX adapter with four
    aligned static slab blocks. Zephyr 4.3.0 `native_sim/native/64` smoke exercises
