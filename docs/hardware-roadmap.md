@@ -50,3 +50,24 @@ Keep amplifier control in HAL and the selected profile/pins in platform code.
 Test mute, startup ramps, fault reporting, thermal/load behavior and recovery
 before high-power listening. Memory capacity and amplifier choice alone do not
 prove sub-millisecond synchronization or 2.1 physical output support.
+
+### Captured carrier pin map (2026-09-20)
+
+Schematic "ESP32 Mainboard": ESP32-WROVER-E (U1) + TAS5805MPWP (U2).
+
+| Signal | ESP32 pin | Notes |
+| --- | --- | --- |
+| `MCU_TX` / `MCU_RX` | GPIO1 / GPIO3 | UART0, 100 Ω series |
+| `GPIO0` | GPIO0 | boot strap, exposed |
+| `EN/CHIP_PU` | EN | `MCU_RST`; no RTS auto-reset wired |
+| `I2C_DATA_SOC` / `I2C_CLK_SOC` | GPIO21 / GPIO22 | TAS5805M SDA / SCL |
+| `I2S_WS` / `I2S_CLK` / `I2S_DATA_OUT` | GPIO25 / GPIO26 / GPIO27 | TAS5805M LRCLK / BCLK / DIN |
+| `AMP_PWDN` | GPIO32 | TAS5805M PDN; must be driven high to enable |
+| `AMP_FAULT` | GPIO34 | TAS5805M FAULT, input |
+| `RGB_DATA` | GPIO13 | status LED |
+| `SENSOR_VP` / `SENSOR_VN` | GPIO36 / GPIO39 | unused on this carrier |
+
+TAS5805M outputs (OUT_A/B) feed 10 µH + 470 nF LC filters to the speakers;
+`AMP_PWDN` and I2C configuration are required before any audio. Flash is 16 MB,
+PSRAM 8 MB (4 MB addressable mapped). Bootloader entry is manual (hold GPIO0 low
+across EN).
