@@ -63,27 +63,23 @@ int tas5805m_bringup(void) {
         board_log("TAS5805M: I2C or GPIO device not ready");
         return EAF_IO;
     }
-    if (gpio_pin_configure(fault_dev, fault_pin, GPIO_INPUT) ||
-        gpio_pin_configure(pwdn_dev, pwdn_pin, GPIO_OUTPUT_INACTIVE)) {
+    if (gpio_pin_configure(fault_dev, fault_pin, GPIO_INPUT | GPIO_PULL_UP) ||
+        gpio_pin_configure(pwdn_dev, pwdn_pin, GPIO_OUTPUT_ACTIVE)) {
         board_log("TAS5805M: GPIO configure failed");
-        return EAF_IO;
-    }
-    /* Release PDN (active high) and let the device settle before I2C. */
-    if (gpio_pin_set(pwdn_dev, pwdn_pin, 1)) {
-        board_log("TAS5805M: PDN assert failed");
         return EAF_IO;
     }
     k_sleep(K_MSEC(10));
 
     amp_address = 0u;
-    for (uint8_t address = TAS5805M_ADDR_FIRST; address <= TAS5805M_ADDR_LAST; ++address) {
+    for (uint8_t address = 0x08u; address <= 0x77u; ++address) {
         if (reg_probe(address) == 0) {
-            amp_address = address;
-            break;
+            board_log("TAS5805M: I2C device at 0x%02x", (unsigned)address);
+            if (address >= TAS5805M_ADDR_FIRST && address <= TAS5805M_ADDR_LAST && !amp_address)
+                amp_address = address;
         }
     }
     if (!amp_address) {
-        board_log("TAS5805M: no device on 0x%02x-0x%02x (PDN=%d fault=%d)",
+        board_log("TAS5805M: no amp on 0x%02x-0x%02x (PDN=%d fault=%d)",
                   (unsigned)TAS5805M_ADDR_FIRST, (unsigned)TAS5805M_ADDR_LAST,
                   (int)gpio_pin_get(pwdn_dev, pwdn_pin), (int)gpio_pin_get(fault_dev, fault_pin));
         return EAF_IO;
