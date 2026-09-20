@@ -1,6 +1,7 @@
 #include "board_config.h"
 #include "board_runtime.h"
 #include "diagnostics.h"
+#include "tas5805m.h"
 #include <board_output.h>
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_sendspin_client.h>
@@ -55,6 +56,7 @@ static void start_output(const eaf_sendspin_stream_start_t *start) {
         board_log("Stream start failed rc=%d\n", rc);
     } else {
         apply_volume();
+        (void)tas5805m_play();
         board_log("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
                   start->channels);
     }
@@ -201,6 +203,7 @@ int main(void) {
         board_log("Output initialization failed\n");
         return 1;
     }
+    (void)tas5805m_bringup();
     eaf_sendspin_player_init(&player, board_write, NULL);
 
     uint32_t capacity = eaf_board_output_capacity_frames();
@@ -271,12 +274,13 @@ int main(void) {
                 uint64_t span = (uint64_t)(now - previous_ms);
                 uint64_t rate = span ? (client.rx_total - previous_rx) * 1000u / span : 0;
                 board_log("Sendspin chunks=%u written=%u dropped=%u underruns=%u sync=%d "
-                          "lat_ms=%lld level=%u flags=%u rx=%llu B/s vol=%d mute=%d\n",
+                          "lat_ms=%lld level=%u flags=%u rx=%llu B/s vol=%d mute=%d fault=%d\n",
                           (unsigned)atomic_get(&chunks), player.frames_written,
                           player.frames_dropped, eaf_board_output_underruns(),
                           (int)player.synchronized, (long long)(player.last_latency_us / 1000),
                           eaf_board_output_level(), eaf_board_output_flags(),
-                          (unsigned long long)rate, volume_level, (int)volume_muted);
+                          (unsigned long long)rate, volume_level, (int)volume_muted,
+                          (int)tas5805m_fault());
                 wifi_health();
                 previous_rx = client.rx_total;
                 previous_ms = now;
