@@ -1,5 +1,6 @@
 #include "diagnostics.h"
 #include "board_runtime.h"
+#include "ota.h"
 #include <errno.h>
 #include <string.h>
 #include <zephyr/kernel.h>
@@ -55,6 +56,10 @@ static void serve(int fd) {
     }
     if (!strstr(request, "\r\n\r\n"))
         return;
+    if (ota_available() && !strncmp(request, "POST /ota ", sizeof("POST /ota ") - 1u)) {
+        (void)ota_handle_request(fd, request, used);
+        return;
+    }
     const char *body;
     size_t length;
     const char *header;

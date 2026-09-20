@@ -49,6 +49,44 @@ advertises stereo. The board always expands the source to stereo for the sink.
 Select **EAF Sendspin WROOM** in Music Assistant and play a track. UART logs
 report `chunks/written/dropped/underruns` every 5 seconds.
 
+## OTA updates (optional, MCUboot)
+
+The default build uses the ESP32 simple boot, which has no OTA. To update over
+Wi-Fi instead of UART, build the MCUboot profile and install the bootloader once.
+
+One-time UART install (MCUboot at 0x1000, app in slot0 at 0x20000):
+
+```sh
+# Bootloader (once)
+cmake -S build-deps/mcuboot/boot/zephyr -B build-mcuboot-esp32 -G Ninja \
+  -DBOARD=esp32_devkitc/esp32/procpu -DZEPHYR_TOOLCHAIN_VARIANT=zephyr \
+  -DPython3_EXECUTABLE="$PWD/build-deps/venv/bin/python" \
+  "-DZEPHYR_MODULES=$PWD/build-deps/hal-espressif;$PWD/build-deps/mbedtls;$PWD/build-deps/mcuboot"
+cmake --build build-mcuboot-esp32
+
+# App with OTA
+cmake -S platform/esp32_sendspin -B build-wrover-ota -G Ninja \
+  -DBOARD=esp32_devkitc/esp32/procpu -DZEPHYR_TOOLCHAIN_VARIANT=zephyr \
+  "-DEXTRA_CONF_FILE=psram.conf;ota.conf" -DEXTRA_DTC_OVERLAY_FILE=psram.overlay \
+  -DPython3_EXECUTABLE="$PWD/build-deps/venv/bin/python" \
+  "-DZEPHYR_MODULES=$PWD;$PWD/build-deps/hal-espressif;$PWD/build-deps/mbedtls;$PWD/build-deps/mcuboot"
+cmake --build build-wrover-ota
+
+esptool --chip esp32 --port /dev/ttyUSB0 --baud 460800 write-flash \
+  0x1000 build-mcuboot-esp32/zephyr/zephyr.bin \
+  0x20000 build-wrover-ota/zephyr/zephyr.signed.bin
+```
+
+After that, flash over the network (the board responds on `/logs` at its IP):
+
+```sh
+curl --data-binary @build-wrover-ota/zephyr/zephyr.signed.bin http://<board-ip>/ota
+```
+
+The app writes `image-1`, requests a permanent upgrade and reboots; MCUboot swaps
+and boots the new image. Partitions (4 MB layout): mcuboot `0x1000`, sys
+`0x10000`, image-0 `0x20000`, image-1 `0x170000`, scratch `0x3e0000`.
+
 ## Qualification
 
 Builds for `native_sim` (null sink) and `esp32_devkitc/esp32/procpu` (I2S).
