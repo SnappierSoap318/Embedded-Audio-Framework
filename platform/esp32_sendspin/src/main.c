@@ -1,6 +1,7 @@
 #include "board_config.h"
 #include "board_runtime.h"
 #include "diagnostics.h"
+#include "ota.h"
 #include "tas5805m.h"
 #include <board_output.h>
 #include <eaf/eaf_hal.h>
@@ -9,6 +10,7 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
+#include <zephyr/sys/reboot.h>
 
 /* dhcpv4.h requires the net_if declaration first. */
 #include <zephyr/net/dhcpv4.h>
@@ -285,6 +287,11 @@ int main(void) {
                 previous_rx = client.rx_total;
                 previous_ms = now;
                 report = now + 5000;
+            }
+            if (ota_reboot_requested()) {
+                board_log("OTA reboot\n");
+                k_sleep(K_MSEC(200));
+                sys_reboot(SYS_REBOOT_COLD);
             }
             k_sleep(K_MSEC(1));
         }

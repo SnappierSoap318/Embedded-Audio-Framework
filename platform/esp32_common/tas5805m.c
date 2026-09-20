@@ -63,7 +63,7 @@ int tas5805m_bringup(void) {
         board_log("TAS5805M: I2C or GPIO device not ready");
         return EAF_IO;
     }
-    if (gpio_pin_configure(fault_dev, fault_pin, GPIO_INPUT | GPIO_PULL_UP) ||
+    if (gpio_pin_configure(fault_dev, fault_pin, GPIO_INPUT) ||
         gpio_pin_configure(pwdn_dev, pwdn_pin, GPIO_OUTPUT_ACTIVE)) {
         board_log("TAS5805M: GPIO configure failed");
         return EAF_IO;
@@ -118,5 +118,6 @@ bool tas5805m_fault(void) {
     const struct device *fault_dev = amp_gpio_dev(CONFIG_EAF_AMP_FAULT_GPIO);
     if (!amp_present || !device_is_ready(fault_dev))
         return false;
-    return gpio_pin_get(fault_dev, amp_gpio_pin(CONFIG_EAF_AMP_FAULT_GPIO)) > 0;
+    /* FAULT is open-drain, active low (external pull-up on this carrier). */
+    return gpio_pin_get(fault_dev, amp_gpio_pin(CONFIG_EAF_AMP_FAULT_GPIO)) == 0;
 }

@@ -14,9 +14,14 @@
 #define OTA_RECV_TIMEOUT_MS 5000
 
 static struct flash_img_context flash_ctx;
+static atomic_t ota_reboot_flag;
 
 bool ota_available(void) {
     return true;
+}
+
+bool ota_reboot_requested(void) {
+    return atomic_get(&ota_reboot_flag) != 0;
 }
 
 static bool send_all(int fd, const char *data, size_t length) {
@@ -132,9 +137,8 @@ bool ota_handle_request(int fd, const char *request, size_t used) {
         respond(fd, "500 Internal Error", "upgrade request failed\n");
         return true;
     }
-    board_log("OTA: image written, rebooting");
+    board_log("OTA: image written, reboot pending");
     respond(fd, "200 OK", "ok, rebooting\n");
-    k_sleep(K_MSEC(200));
-    sys_reboot(SYS_REBOOT_COLD);
+    atomic_set(&ota_reboot_flag, 1);
     return true;
 }

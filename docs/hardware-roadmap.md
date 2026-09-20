@@ -60,10 +60,10 @@ Schematic "ESP32 Mainboard": ESP32-WROVER-E (U1) + TAS5805MPWP (U2).
 | `MCU_TX` / `MCU_RX` | GPIO1 / GPIO3 | UART0, 100 Ω series |
 | `GPIO0` | GPIO0 | boot strap, exposed |
 | `EN/CHIP_PU` | EN | `MCU_RST`; no RTS auto-reset wired |
-| `I2C_DATA_SOC` / `I2C_CLK_SOC` | GPIO21 / GPIO22 | TAS5805M SDA / SCL |
-| `I2S_WS` / `I2S_CLK` / `I2S_DATA_OUT` | GPIO25 / GPIO26 / GPIO27 | TAS5805M LRCLK / BCLK / DIN |
-| `AMP_PWDN` | GPIO32 | TAS5805M PDN; must be driven high to enable |
-| `AMP_FAULT` | GPIO34 | TAS5805M FAULT, input |
+| `I2C_DATA_SOC` / `I2C_CLK_SOC` | GPIO21 / GPIO27 | TAS5805M SDA / SCL |
+| `I2S_WS` / `I2S_CLK` / `I2S_DATA_OUT` | GPIO25 / GPIO26 / GPIO22 | TAS5805M LRCLK / BCLK / DIN |
+| `AMP_PWDN` | GPIO33 | TAS5805M PDN; must be driven high to enable |
+| `AMP_FAULT` | GPIO34 | TAS5805M FAULT, input (active low) |
 | `RGB_DATA` | GPIO13 | status LED |
 | `SENSOR_VP` / `SENSOR_VN` | GPIO36 / GPIO39 | unused on this carrier |
 

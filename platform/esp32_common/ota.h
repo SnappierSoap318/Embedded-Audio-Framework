@@ -13,3 +13,8 @@ bool ota_available(void);
    terminated, including the header terminator and any body bytes. Returns true
    if the request was handled (the caller must close the socket). */
 bool ota_handle_request(int fd, const char *request, size_t used);
+
+/* Set after an image is written and the upgrade requested. The application must
+   reboot from a clean context (sys_reboot cannot run while the HTTP handler
+   holds locks). */
+bool ota_reboot_requested(void);

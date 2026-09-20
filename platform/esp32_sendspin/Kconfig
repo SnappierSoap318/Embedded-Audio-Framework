@@ -38,7 +38,7 @@ config EAF_SAMPLE_RATE
 
 config EAF_AMP_PWDN_GPIO
     int "TAS5805M PDN GPIO (amplifier enable)"
-    default 32
+    default 33
     range 0 39
 config EAF_AMP_FAULT_GPIO
     int "TAS5805M FAULT GPIO (input)"

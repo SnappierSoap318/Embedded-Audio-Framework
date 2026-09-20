@@ -1,12 +1,39 @@
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/pinctrl/esp-pinctrl-common.h>
+#include <zephyr/dt-bindings/pinctrl/esp32-gpio-sigmap.h>
+#include <zephyr/dt-bindings/pinctrl/esp32-pinctrl.h>
+
 &psram0 { status = "disabled"; };
 &wifi { status = "okay"; };
+
+/* Board 2 (WROVER + TAS5805M): I2S WS=25, BCLK=26, DIN=22. */
 &i2s0_default {
     group1 {
-        pinmux = <I2S0_O_BCK_GPIO26>, <I2S0_O_WS_GPIO25>, <I2S0_O_SD_GPIO27>;
+        pinmux = <I2S0_O_BCK_GPIO26>, <I2S0_O_WS_GPIO25>, <I2S0_O_SD_GPIO22>;
     };
 };
 &i2s0 {
     status = "okay";
     pinctrl-0 = <&i2s0_default>;
     pinctrl-names = "default";
+};
+
+/* TAS5805M I2C: SDA=GPIO21, SCL=GPIO27. */
+&i2c0 {
+    status = "okay";
+    clock-frequency = <100000>;
+    sda-gpios = <&gpio0 21 GPIO_OPEN_DRAIN>;
+    scl-gpios = <&gpio0 27 GPIO_OPEN_DRAIN>;
+    pinctrl-0 = <&i2c0_amp>;
+    pinctrl-names = "default";
+};
+&pinctrl {
+    i2c0_amp: i2c0_amp {
+        group1 {
+            pinmux = <I2C0_SDA_GPIO21>, <I2C0_SCL_GPIO27>;
+            bias-pull-up;
+            drive-open-drain;
+            output-high;
+        };
+    };
 };
