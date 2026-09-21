@@ -15,6 +15,8 @@ Keep this file and `docs/licensing.md` in sync when a vendored file is updated.
   `dr_libs/dr_wav.h` (v0.14.6), `dr_libs/LICENSE`
 - License: public domain (Unlicense) or MIT-0, at your option (see
   `dr_libs/LICENSE`; the choice is also embedded at the top of each header)
+- Implementation translation unit: `impl/dr_flac_impl.c` (compiled with
+  warnings suppressed, outside EAF's lint/format scope)
 
 ## stb
 
