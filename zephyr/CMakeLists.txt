@@ -16,7 +16,13 @@ if(CONFIG_EAF)
     ../core/eaf_control.c ../core/eaf_dsp.c ../core/eaf_sync.c ../core/eaf_decoder.c
     ../hal/common/hal_atomic_c11.c ../hal/common/sink_null.c
     ../hal/zephyr/hal_os_zephyr.c ../apps/player/eaf_player.c
-    ../apps/decoders/dec_wav.c ../apps/decoders/dec_pcm.c)
+    ../apps/decoders/dec_wav.c ../apps/decoders/dec_pcm.c ../apps/decoders/dec_flac.c)
+  # Vendored dr_flac implementation: system include for the header, warnings off
+  # for the implementation translation unit.
+  zephyr_library_compile_options(-isystem "${CMAKE_CURRENT_LIST_DIR}/../third_party/dr_libs")
+  set(EAF_DR_FLAC_IMPL ${CMAKE_CURRENT_LIST_DIR}/../third_party/impl/dr_flac_impl.c)
+  set_source_files_properties(${EAF_DR_FLAC_IMPL} PROPERTIES COMPILE_OPTIONS "-w")
+  zephyr_library_sources(${EAF_DR_FLAC_IMPL})
   if(CONFIG_SCHED_CPU_MASK)
     zephyr_library_sources(../hal/zephyr/cpu_pin.c)
   else()
