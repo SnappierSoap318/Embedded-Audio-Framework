@@ -50,12 +50,15 @@ add_library(eaf STATIC core/eaf_types.c core/eaf_reservoir.c core/eaf_graph.c co
 target_include_directories(eaf PUBLIC include)
 target_link_libraries(eaf PUBLIC Threads::Threads m)
 # Codec adapters and their vendored implementations (third_party).
-target_sources(eaf PRIVATE apps/decoders/dec_flac.c apps/decoders/dec_mp3.c)
-target_include_directories(eaf SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dr_libs)
+target_sources(eaf PRIVATE apps/decoders/dec_flac.c apps/decoders/dec_mp3.c
+  apps/decoders/dec_vorbis.c)
+target_include_directories(eaf SYSTEM PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dr_libs
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
 add_library(eaf_codec_vendor STATIC third_party/impl/dr_flac_impl.c
-  third_party/impl/dr_mp3_impl.c)
+  third_party/impl/dr_mp3_impl.c third_party/impl/stb_vorbis_impl.c)
 target_include_directories(eaf_codec_vendor SYSTEM PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dr_libs)
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/dr_libs
+  ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb)
 target_compile_options(eaf_codec_vendor PRIVATE -w)
 target_link_libraries(eaf PUBLIC eaf_codec_vendor)
 target_sources(eaf PRIVATE apps/decoders/dec_opus.c)
@@ -170,6 +173,10 @@ if(BUILD_TESTING)
   target_link_libraries(test_dec_mp3 PRIVATE eaf)
   add_test(NAME dec_mp3 COMMAND test_dec_mp3 ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.mp3)
   set_tests_properties(dec_mp3 PROPERTIES TIMEOUT 30)
+  add_executable(test_dec_vorbis tests/test_dec_vorbis.c)
+  target_link_libraries(test_dec_vorbis PRIVATE eaf)
+  add_test(NAME dec_vorbis COMMAND test_dec_vorbis ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.ogg)
+  set_tests_properties(dec_vorbis PROPERTIES TIMEOUT 30)
   if(EAF_ENABLE_SENDPIN)
     add_executable(test_sendspin_sync tests/test_sendspin_sync.c)
     target_link_libraries(test_sendspin_sync PRIVATE eaf)

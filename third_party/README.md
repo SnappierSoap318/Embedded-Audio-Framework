@@ -23,7 +23,9 @@ Keep this file and `docs/licensing.md` in sync when a vendored file is updated.
 
 - Upstream: https://github.com/nothings/stb
 - Revision: `2c980bb59875b0d32144a71867fbdebb2f77cd20`
-- Files: `stb/stb_vorbis.c` (v1.22)
+- Files: `stb/stb_vorbis.c` (v1.22), plus the EAF-authored shim
+  `stb/stb_vorbis_header.h` (declarations only) and the implementation
+  translation unit `impl/stb_vorbis_impl.c`
 - License: public domain (Unlicense) or MIT, at your option (embedded at the top
   of the file)
 

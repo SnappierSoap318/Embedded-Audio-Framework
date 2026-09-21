@@ -248,7 +248,10 @@ interleaved Q1.31.
   bracketed input ring (`core/eaf_dec_input.c`), int16 -> Q1.31, host test on
   `tests/fixtures/tone.mp3`. `onSeek`/`onTell` are NULL so dr_mp3 reads past
   ID3v2 tags instead of failing on a non-seekable stream.
-- [ ] **C6 — Vorbis adapter.** stb_vorbis (`third_party/stb`), push/pull `pushdata` API.
+- [x] **C6 — Vorbis adapter.** Done: stb_vorbis (`third_party/stb`) pushdata API
+  (`apps/decoders/dec_vorbis.c`), host test on `tests/fixtures/tone.ogg`. A
+  decoded Vorbis frame is emitted whole, so the owner must supply a buffer at
+  least as large as the stream's maximum frame.
 - [ ] **C7 — Sendspin integration.** Route compressed frames through the decode
   worker and keep rate control/resampling after decode; advertise only built codecs.
 - [ ] **C8 — Tests and licensing.** Host fixtures (flac/opus/vorbis available),
