@@ -1,32 +1,23 @@
 #pragma once
+#include <eaf/eaf_dec_input.h>
 #include <eaf/eaf_decoder.h>
 
 /* FLAC adapter built on dr_flac (third_party/dr_libs).
  *
  * dr_flac streams through a read callback that must fill its whole 4 KB L2
  * buffer in one call or it latches end-of-stream, so this adapter buffers
- * compressed bytes in a caller-owned state and blocks (through `await`) when
- * the decode owner needs more input than is buffered. When `await` is NULL the
- * read returns a short count, which is only correct when the complete stream is
- * already buffered or at end-of-stream (host tests). */
+ * compressed bytes in a caller-owned state and blocks (through the input's
+ * await hook) when the decode owner needs more input than is buffered. With no
+ * await hook the read returns a short count, which is only correct when the
+ * complete stream is already buffered or at end-of-stream. */
 
 #define EAF_DEC_FLAC_RING_BYTES 16384u
 #define EAF_DEC_FLAC_TEMP_FRAMES 512u
 
-/* Called by the input read when more bytes are needed and input is not at EOF.
-   Return 0 once more data may have arrived, non-zero to abort. May block; it
-   runs on the decode owner, never on the audio path. */
-typedef int (*eaf_dec_flac_await_fn)(void *ctx);
-
 typedef struct {
     void *flac; /* drflac* */
+    eaf_dec_input_t input;
     uint8_t ring[EAF_DEC_FLAC_RING_BYTES];
-    size_t capacity;
-    size_t tail;
-    size_t count;
-    bool eof;
-    eaf_dec_flac_await_fn await;
-    void *await_ctx;
     eaf_format_t format;
     uint8_t flac_channels;
     uint8_t output_channels;
@@ -35,7 +26,7 @@ typedef struct {
 
 /* Set the optional await hook before opening; pass NULL for a fully buffered
    stream. */
-void eaf_dec_flac_configure(eaf_dec_flac_t *state, eaf_dec_flac_await_fn await, void *await_ctx);
+void eaf_dec_flac_configure(eaf_dec_flac_t *state, eaf_dec_await_fn await, void *await_ctx);
 /* Mark end of compressed input so a trailing partial buffer can be decoded.
    The caller must also release any waiter blocked in `await`. */
 void eaf_dec_flac_finish(eaf_dec_flac_t *state);

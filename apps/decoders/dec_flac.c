@@ -9,28 +9,7 @@
 #define EAF_DEC_FLAC_HEADER_MIN 4096u
 
 static size_t flac_read(void *ctx, void *out, size_t bytes) {
-    eaf_dec_flac_t *state = ctx;
-    uint8_t *dst = out;
-    size_t got = 0;
-    while (got < bytes) {
-        if (state->count == 0u) {
-            if (state->eof || state->await == NULL)
-                break;
-            if (state->await(state->await_ctx) != 0)
-                break;
-            continue;
-        }
-        size_t chunk = state->capacity - state->tail;
-        if (chunk > state->count)
-            chunk = state->count;
-        if (chunk > bytes - got)
-            chunk = bytes - got;
-        memcpy(dst + got, state->ring + state->tail, chunk);
-        state->tail = (state->tail + chunk) % state->capacity;
-        state->count -= chunk;
-        got += chunk;
-    }
-    return got;
+    return eaf_dec_input_read((eaf_dec_input_t *)ctx, out, bytes);
 }
 
 static drflac_bool32 flac_seek(void *ctx, int offset, drflac_seek_origin origin) {
@@ -40,16 +19,16 @@ static drflac_bool32 flac_seek(void *ctx, int offset, drflac_seek_origin origin)
     return DRFLAC_FALSE;
 }
 
-void eaf_dec_flac_configure(eaf_dec_flac_t *state, eaf_dec_flac_await_fn await, void *await_ctx) {
+void eaf_dec_flac_configure(eaf_dec_flac_t *state, eaf_dec_await_fn await, void *await_ctx) {
     if (!state)
         return;
-    state->await = await;
-    state->await_ctx = await_ctx;
+    state->input.await = await;
+    state->input.await_ctx = await_ctx;
 }
 
 void eaf_dec_flac_finish(eaf_dec_flac_t *state) {
     if (state)
-        state->eof = true;
+        eaf_dec_input_finish(&state->input);
 }
 
 static int flac_open(void *ctx, const eaf_decoder_config_t *cfg, const eaf_format_t *output) {
@@ -64,10 +43,8 @@ static int flac_open(void *ctx, const eaf_decoder_config_t *cfg, const eaf_forma
     if (cfg->sample_rate != output->sample_rate)
         return EAF_UNSUPPORTED;
     state->flac = NULL;
-    state->capacity = EAF_DEC_FLAC_RING_BYTES;
-    state->tail = 0;
-    state->count = 0;
-    state->eof = false;
+    eaf_dec_input_init(&state->input, state->ring, EAF_DEC_FLAC_RING_BYTES, state->input.await,
+                       state->input.await_ctx);
     state->flac_channels = cfg->channels;
     state->output_channels = output->num_channels;
     state->format = *output;
@@ -76,18 +53,7 @@ static int flac_open(void *ctx, const eaf_decoder_config_t *cfg, const eaf_forma
 
 static int flac_push(void *ctx, const uint8_t *data, size_t length, size_t *consumed) {
     eaf_dec_flac_t *state = ctx;
-    *consumed = 0;
-    if (state->eof)
-        return EAF_OK;
-    size_t space = state->capacity - state->count;
-    size_t take = length < space ? length : space;
-    size_t write = (state->tail + state->count) % state->capacity;
-    for (size_t i = 0; i < take; ++i) {
-        state->ring[write] = data[i];
-        write = (write + 1u) % state->capacity;
-    }
-    state->count += take;
-    *consumed = take;
+    *consumed = eaf_dec_input_push(&state->input, data, length);
     return EAF_OK;
 }
 
@@ -96,12 +62,12 @@ static int flac_pull(void *ctx, int32_t *pcm, uint32_t max_frames, uint32_t *fra
     eaf_dec_flac_t *state = ctx;
     *frames = 0;
     if (state->flac == NULL) {
-        if (state->await == NULL && state->count < EAF_DEC_FLAC_HEADER_MIN && !state->eof)
+        if (state->input.await == NULL && state->input.count < EAF_DEC_FLAC_HEADER_MIN &&
+            !state->input.eof)
             return EAF_OK; /* wait for the header/metadata */
-        state->flac = drflac_open(flac_read, flac_seek, NULL, state, NULL);
+        state->flac = drflac_open(flac_read, flac_seek, NULL, &state->input, NULL);
         if (state->flac == NULL) {
-            state->tail = 0;
-            state->count = 0;
+            eaf_dec_input_reset(&state->input);
             return EAF_INVALID;
         }
     }
@@ -140,18 +106,14 @@ static void flac_release(eaf_dec_flac_t *state) {
 static int flac_reset(void *ctx) {
     eaf_dec_flac_t *state = ctx;
     flac_release(state);
-    state->tail = 0;
-    state->count = 0;
-    state->eof = false;
+    eaf_dec_input_reset(&state->input);
     return EAF_OK;
 }
 
 static void flac_close(void *ctx) {
     eaf_dec_flac_t *state = ctx;
     flac_release(state);
-    state->tail = 0;
-    state->count = 0;
-    state->eof = false;
+    eaf_dec_input_reset(&state->input);
 }
 
 const eaf_decoder_ops_t eaf_dec_flac_ops = {.open = flac_open,

@@ -244,7 +244,10 @@ interleaved Q1.31.
   (`tests/test_dec_opus.c`). Remaining: measure ESP32-classic CPU before enabling
   in the board profile, and adopt a static allocator (`opus_decoder_create_custom`)
   instead of the default heap allocation at `open`.
-- [ ] **C5 — MP3 adapter.** dr_mp3 (`third_party/dr_libs`), same callback ring as FLAC.
+- [x] **C5 — MP3 adapter.** Done: dr_mp3 (`third_party/dr_libs`), sharing the
+  bracketed input ring (`core/eaf_dec_input.c`), int16 -> Q1.31, host test on
+  `tests/fixtures/tone.mp3`. `onSeek`/`onTell` are NULL so dr_mp3 reads past
+  ID3v2 tags instead of failing on a non-seekable stream.
 - [ ] **C6 — Vorbis adapter.** stb_vorbis (`third_party/stb`), push/pull `pushdata` API.
 - [ ] **C7 — Sendspin integration.** Route compressed frames through the decode
   worker and keep rate control/resampling after decode; advertise only built codecs.
