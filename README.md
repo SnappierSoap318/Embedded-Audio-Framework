@@ -1,5 +1,8 @@
 # Embedded Audio Framework
 
+[![CI](https://github.com/SnappierSoap318/Embedded-Audio-Framework/actions/workflows/ci.yml/badge.svg)](https://github.com/SnappierSoap318/Embedded-Audio-Framework/actions/workflows/ci.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 Embedded C11 audio framework targeting Zephyr, with Linux as its test harness.
 It provides a bounded SPSC audio reservoir, a static DSP pipeline, sink
 adapters (I2S, ALSA, null), and network players built on a shared output owner:
