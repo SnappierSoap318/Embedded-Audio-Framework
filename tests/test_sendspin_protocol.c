@@ -2,10 +2,11 @@
 #include <eaf/eaf_sendspin.h>
 #include <string.h>
 
-/* Exact captured wire strings (docs/bench/sendspin-capture-2026-09-13.md). */
+/* Captured wire shapes (docs/bench/sendspin-capture-2026-09-13.md) with the
+   server identity and instance name replaced by placeholders. */
 static const char server_hello_json[] =
-    "{\"payload\":{\"server_id\":\"Jf0D-_vdN-lqYT93AUwhRk9Ucg9sAZxSOSW-ohaFaD0\",\"name\":"
-    "\"Music Assistant (snappy-storage)\",\"version\":1,\"connection_reason\":\"discovery\","
+    "{\"payload\":{\"server_id\":\"example-server-id\",\"name\":"
+    "\"Music Assistant (example)\",\"version\":1,\"connection_reason\":\"discovery\","
     "\"active_roles\":[\"player@v1\"]},\"type\":\"server/hello\"}";
 static const char server_time_json[] =
     "{\"payload\":{\"client_transmitted\":73611376768,\"server_received\":61896583899,"
@@ -47,8 +48,9 @@ static void parse_messages(void) {
     eaf_sendspin_server_hello_t hello;
     CHECK(!eaf_sendspin_parse_server_hello(server_hello_json, strlen(server_hello_json), &hello));
     CHECK(hello.player_active && hello.version == 1);
-    CHECK(hello.server_id_length == 43 && !memcmp(hello.server_id, "Jf0D-", 5));
-    CHECK(hello.name_length == strlen("Music Assistant (snappy-storage)"));
+    CHECK(hello.server_id_length == strlen("example-server-id") &&
+          !memcmp(hello.server_id, "example-", 8));
+    CHECK(hello.name_length == strlen("Music Assistant (example)"));
     CHECK(hello.connection_reason_length == strlen("discovery"));
 
     eaf_sendspin_server_time_t now;

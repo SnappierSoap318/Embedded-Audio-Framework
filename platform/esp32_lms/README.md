@@ -84,7 +84,7 @@ python -m serial.tools.miniterm /dev/ttyUSB0 115200
 
 Expect `Wi-Fi IPv4: ...`, the player MAC, and `LMS connected`. Select that player
 in `http://192.168.11.132:9000/`; the previously identified board MAC is
-`70:4b:ca:6d:c2:2c`. The app advertises raw PCM support: compressed music requires
+`aa:bb:cc:dd:ee:ff`. The app advertises raw PCM support: compressed music requires
 server-side conversion. Begin with a short 44.1/48 kHz PCM track and low LMS
 volume. Verify left/right separately, mute, pause/resume, stop, and a sample-rate
 change. Then test AP loss and server restart while retaining serial logs.

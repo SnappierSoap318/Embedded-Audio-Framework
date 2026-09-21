@@ -1,7 +1,7 @@
 # WROOM wireless diagnostics — 2026-09-12
 
 The updated I2S image was built, flashed and hash-verified on MAC
-`70:4b:ca:6d:c2:2c`. SHA-256:
+`aa:bb:cc:dd:ee:ff`. SHA-256:
 `330ff42e09a43ebb9a1e4942c03c60c8f59aae32558e0c015d2614686ca2f406`.
 Artifacts and raw serial capture are local, ignored files under
 `build-wroom-wireless/`. Firmware contains private Wi-Fi credentials.

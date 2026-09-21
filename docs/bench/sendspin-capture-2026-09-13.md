@@ -1,5 +1,9 @@
 # Sendspin Phase 0 capture — Music Assistant 2.10.3 — 2026-09-13
 
+> Identifiers, server names and LAN addresses are placeholders. The original
+> device MAC, Sendspin server identity and network addresses were redacted
+> before publication; message shapes and timestamps are otherwise as captured.
+
 Result: **Music Assistant 2.10.3 speaks an older, cleartext Sendspin revision**,
 not the encrypted revision described in the current upstream spec. The handshake
 is a single `client/hello` → `server/hello` exchange over a plain `ws://`
@@ -20,9 +24,9 @@ to reach activation and play PCM against this server.
 
 - **Server:** Music Assistant `2.10.3`, schema `65`
   (`server_version`/`schema_version` from `ws://192.168.11.132:8095/ws`).
-  `server_id` (Sendspin identity): `Jf0D-_vdN-lqYT93AUwhRk9Ucg9sAZxSOSW-ohaFaD0`.
+  `server_id` (Sendspin identity): `example-server-id`.
   Sendspin endpoint: `ws://192.168.11.132:8927/sendspin`; advertised by mDNS
-  `_sendspin-server._tcp` with TXT `path=/sendspin`, `name=Music Assistant (snappy-storage)`.
+  `_sendspin-server._tcp` with TXT `path=/sendspin`, `name=Music Assistant (example)`.
 - **Reference client:** `sendspin` CLI `7.5.0` / `aiosendspin` `6.0.5`
   (Apache-2.0, `Sendspin-Protocol/sendspin`). The protocol library is the
   cleartext implementation; it has no Noise dependency.
@@ -96,7 +100,7 @@ priority order; `buffer_capacity` is bytes of pending compressed audio;
 ### server → client: `server/hello` (208 B)
 
 ```json
-{"payload":{"server_id":"Jf0D-_vdN-lqYT93AUwhRk9Ucg9sAZxSOSW-ohaFaD0","name":"Music Assistant (snappy-storage)","version":1,"connection_reason":"discovery","active_roles":["player@v1"]},"type":"server/hello"}
+{"payload":{"server_id":"example-server-id","name":"Music Assistant (example)","version":1,"connection_reason":"discovery","active_roles":["player@v1"]},"type":"server/hello"}
 ```
 
 ### client → server: `client/state` (164 B, after `server/hello`)
