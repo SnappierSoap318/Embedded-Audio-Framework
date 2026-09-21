@@ -233,14 +233,17 @@ interleaved Q1.31.
 - [ ] **C2 — Decoder interface and worker.** Done: `eaf_decoder` + `eaf_decode_worker`
   with host tests (`tests/test_decoder.c`), backpressure retention, format checks
   and reset-on-error.
-- [ ] **C3 — FLAC adapter.** dr_flac (`third_party/dr_libs`). dr_flac streams
-  through a read callback that must fill its full L2 buffer in one call or it
-  latches EOF (`dr_flac.h:2231`), so streaming needs a bounded input ring plus a
-  blocking/await hook on the decode thread (whole-stream buffering is acceptable
-  for host tests). Allocate decoder state at open with a static pool.
-- [ ] **C4 — Opus adapter.** libopus (submodule `third_party/opus`), fixed-point,
-  48 kHz, raw packets; `opus_decoder_create_custom` with a static allocator.
-  Measure ESP32-classic CPU before enabling in the board profile.
+- [x] **C3 — FLAC adapter.** Done: dr_flac (`third_party/dr_libs`) with a bounded
+  bracketed input ring and an optional await hook (`apps/decoders/dec_flac.c`),
+  because dr_flac latches EOF on a short read (`dr_flac.h:2231`). Host test decodes
+  `tests/fixtures/tone.flac` sample-exact (`tests/test_dec_flac.c`); Zephyr WROVER
+  build verified. Driver-side allocation is deferred to opus-open work; dr_flac
+  state is currently heap-allocated at `open` (off the audio path).
+- [x] **C4 — Opus adapter.** Done: libopus v1.6.1 submodule, fixed-point, raw
+  packets, staged drain (`apps/decoders/dec_opus.c`); round-trip host test
+  (`tests/test_dec_opus.c`). Remaining: measure ESP32-classic CPU before enabling
+  in the board profile, and adopt a static allocator (`opus_decoder_create_custom`)
+  instead of the default heap allocation at `open`.
 - [ ] **C5 — MP3 adapter.** dr_mp3 (`third_party/dr_libs`), same callback ring as FLAC.
 - [ ] **C6 — Vorbis adapter.** stb_vorbis (`third_party/stb`), push/pull `pushdata` API.
 - [ ] **C7 — Sendspin integration.** Route compressed frames through the decode
