@@ -46,16 +46,24 @@ The existing Q1.31 DSP and 32-bit I2S slots do not imply 32-bit source precision
    bounded PI control, ASRC/hardware-PLL backends and +/-100 ppm tests. Required
    before claiming LMS multi-room accuracy.
 5. **Supporting playback and codecs:** native WAV source/player, EOF/seek/gain
-   queue and host tests already work. The codec layer is being built on the
-   `eaf_decoder` adapter contract plus a bounded `eaf_decode_worker`; PCM is done
-   and FLAC (dr_flac), Opus (libopus), MP3 (dr_mp3) and Vorbis (stb_vorbis) follow.
-   Single-header decoders are vendored under `third_party/` with provenance and
-   licenses in `third_party/README.md` and `docs/licensing.md`. Native ALSA is
-   optional listening/debug infrastructure, not a prerequisite for the embedded
-   milestones. Dither remains work.
-6. **Platform backends:** Zephyr and standalone Linux are implemented; an
-   ESP-IDF v6.x HAL backend (FreeRTOS, lwIP, `driver/i2s_std.h`) is the next
-   backend, which also unlocks an ESPHome external-component path.
+   queue and host tests already work. The codec layer sits on the `eaf_decoder`
+   adapter contract plus a bounded `eaf_decode_worker`: PCM, FLAC (dr_flac), Opus
+   (libopus), MP3 (dr_mp3) and Vorbis (stb_vorbis) adapters are complete. The
+   Sendspin client negotiates a configurable `supported_formats` preference list,
+   parses PCM/FLAC/Opus/MP3/Vorbis, and the player binds a caller-owned adapter
+   whose decoded frames go through the same rate-adjusted sink as PCM. Because
+   dr_flac/dr_mp3 latch EOF on a short read, a live incremental FLAC/MP3 stream
+   needs an `await` hook serviced by a decode thread; Opus/Vorbis stream
+   incrementally today. Single-header decoders are vendored under `third_party/`
+   with provenance and licenses in `third_party/README.md` and
+   `docs/licensing.md`. Native ALSA is optional listening/debug infrastructure,
+   not a prerequisite for the embedded milestones. Dither remains work.
+6. **Platform backends:** Zephyr and standalone Linux are implemented. The
+   ESP-IDF v6 HAL backend is implemented (`hal/esp_idf`: FreeRTOS tasks,
+   lwIP sockets, `driver/i2s_std.h` with APLL `adjust_ppm`) and a standalone
+   `platform/esp_idf_sendspin` smoke project builds for classic `esp32`; the
+   shared `platform/esp32_common` split and a board-output integration remain.
+   This also unlocks an ESPHome external-component path.
 7. **Hardware qualification:** board-specific codec, PSRAM/cache, I2S clocks and
    DMA validation; long-running network/Bluetooth stress, discontinuity tests,
    GPIO timing and multi-room phase measurements.
