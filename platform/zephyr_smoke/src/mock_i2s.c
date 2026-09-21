@@ -9,6 +9,7 @@ static bool started;
 unsigned eaf_mock_commits;
 int32_t eaf_mock_last;
 bool eaf_mock_fail_write, eaf_mock_fail_start, eaf_mock_fail_drop, eaf_mock_fail_drain;
+bool eaf_mock_require_drain;
 static int configure(const struct device *dev, enum i2s_dir dir, const struct i2s_config *cfg) {
     (void)dev;
     if (dir != I2S_DIR_TX || cfg->word_size != 32 || cfg->channels != 2)
@@ -40,12 +41,13 @@ static int trigger(const struct device *dev, enum i2s_dir dir, enum i2s_trigger_
             return -EIO;
         started = false;
     } else if (cmd == I2S_TRIGGER_DROP) {
-        if (eaf_mock_fail_drop)
+        /* Model a DMA backend whose active block must complete before DROP. */
+        if (eaf_mock_fail_drop || (eaf_mock_require_drain && started && pending))
             return -EIO;
         started = false;
     } else
         return -EINVAL;
-    if (pending) {
+    if (pending && !(eaf_mock_require_drain && cmd == I2S_TRIGGER_START)) {
         k_mem_slab_free(config.mem_slab, pending);
         pending = NULL;
     }

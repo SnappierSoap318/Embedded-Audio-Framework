@@ -141,14 +141,24 @@ static int commit(eaf_sink_t *sink, eaf_buffer_t *buffer) {
 }
 static int stop(eaf_sink_t *sink) {
     (void)sink;
+    /* This block never reached the driver. Release it before waiting for the
+       entire slab, otherwise drain would wait for our own allocation. */
+    if (state.held) {
+        k_mem_slab_free(&tx_blocks, state.held);
+        state.held = NULL;
+    }
+    /* The ESP32 backend drops queued blocks but does not reclaim the active DMA
+       block on DROP. Let the small hardware queue retire first; the reservoir
+       is cancelled by the owner, not drained here. Retain state on failure. */
+    if (state.started) {
+        int rc = drain();
+        if (rc)
+            return rc;
+    }
     if (state.configured) {
         int rc = i2s_trigger(state.device, I2S_DIR_TX, I2S_TRIGGER_DROP);
         if (rc)
             return io_error("drop", rc);
-    }
-    if (state.held) {
-        k_mem_slab_free(&tx_blocks, state.held);
-        state.held = NULL;
     }
     state.running = false;
     state.started = false;

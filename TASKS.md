@@ -148,11 +148,17 @@ encrypted revision is a separate, later target.
   near-zero underruns and `rx≈88.8 kB/s` while the link holds, but intermittent
   half-rate dips still break it. WROOM concluded at its Wi-Fi throughput limit
   (2026-09-13); Wi-Fi RX buffers / AMPDU BA window were raised and an
-  `EAF_SAMPLE_RATE` fallback added. Remaining: close the gate on the WROVER.
+  `EAF_SAMPLE_RATE` fallback added. WROVER direct-boot proof recorded
+  2026-09-20: stereo 44.1 kHz PCM is audible with server volume control and zero
+  underruns across a multi-hour run; see
+  docs/bench/wrover-i2s-2026-09-20.md. Remaining: MCUboot stream-start stall and
+  release stress.
 - [ ] **S04 — Phase 3 WROVER/PSRAM sync quality.** PSRAM jitter buffer
   (`psram.conf`: 65536 frames ≈1.5 s, built at DRAM0 67%), drift correction,
   measured inter-device phase error. Wi-Fi throughput must support real-time
-  stereo; mono remains the WROOM fallback.
+  stereo; mono remains the WROOM fallback. The 65536-frame PSRAM reservoir held
+  real-time stereo intake overnight on the WROVER; drift correction and measured
+  inter-device phase error remain.
 - [ ] **S05 — Phase 4 spec-current encryption/pairing.** Noise `KKpsk2` via
   mbedTLS and pairing, gated on a future MA/spec revision.
 - [ ] **S06 — Selectable audio formats.** Add user-selectable source sample rate

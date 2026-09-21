@@ -203,6 +203,14 @@ int eaf_board_output_start(const eaf_format_t *format, uint32_t ready_frames, bo
     output_log("Stream: %u Hz, %u channels", format->sample_rate, (unsigned)format->num_channels);
     return 0;
 }
+int eaf_board_output_replace(const eaf_format_t *format, uint32_t ready_frames, bool held) {
+    if (!format || !eaf_format_valid(format) || format->num_channels > 2)
+        return EAF_UNSUPPORTED;
+    eaf_board_output_stop();
+    if (active)
+        return EAF_IO; /* Teardown could not establish quiescence. */
+    return eaf_board_output_start(format, ready_frames, held);
+}
 int eaf_board_output_release(void) {
     if (!active || hal_atomic_get(&failed))
         return EAF_STATE;

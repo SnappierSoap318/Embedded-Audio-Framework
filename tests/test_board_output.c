@@ -33,7 +33,8 @@ int main(void) {
         CHECK(reservoir.frames_read == 2 && !reservoir.underruns);
         eaf_null_sink_ctx_t *out = board_sink()->driver_data;
         int32_t *samples = out->samples[out->active ^ 1u];
-        CHECK(samples[0] >= 134217700 && samples[0] <= 134217728);
+        /* Half-scale input at -10 dB, allowing fixed-point rounding. */
+        CHECK(samples[0] >= 339546976 && samples[0] <= 339546980);
         CHECK(samples[1] == 0 && samples[3] == 0);
         cb.stop(NULL);
         CHECK(!active && !audio.impl && pipeline.state == EAF_UNINITIALIZED);
@@ -49,8 +50,9 @@ int main(void) {
     wait_done();
     eaf_null_sink_ctx_t *out = board_sink()->driver_data;
     int32_t *samples = out->samples[out->active ^ 1u];
-    CHECK(samples[0] > 134217700 && samples[1] < -134217700);
-    CHECK(samples[2] == 0 && samples[3] > 134217700);
+    CHECK(samples[0] >= 339546976 && samples[0] <= 339546980);
+    CHECK(samples[1] >= -339546980 && samples[1] <= -339546976);
+    CHECK(samples[2] == 0 && samples[3] >= 339546976 && samples[3] <= 339546980);
     cb.stop(NULL);
     CHECK(!cb.start(NULL, &stereo));
     cb.stop(NULL); /* Cancellation while prebuffering. */
@@ -80,5 +82,26 @@ int main(void) {
     CHECK(limits.ready_frames == 4096 && limits.clamped);
     cb.stop(NULL); /* Cancellation while the worker is held. */
     CHECK(!active && !audio.impl && !board_output_failed());
+    /* A new stream may arrive before the old EOF has drained. Keep the old
+       worker gated to make that ordering deterministic, then replace repeatedly
+       with changing rates and verify no old samples or EOF reach the new track. */
+    for (unsigned track = 0; track < 10; ++track) {
+        CHECK(!eaf_board_output_start(&stereo, 2, true));
+        CHECK(eaf_board_output_write(channels, 2) == 2);
+        if (track & 1u)
+            eaf_board_output_finish();
+        CHECK(!hal_atomic_get(&done));
+        eaf_format_t next = {track & 1u ? 44100 : 48000, 2, 3};
+        CHECK(!eaf_board_output_replace(&next, 2, true));
+        CHECK(!eaf_board_output_level() && !hal_atomic_get(&done));
+        CHECK(reservoir.format.sample_rate == next.sample_rate);
+        CHECK(eaf_board_output_write(channels, 2) == 2);
+        eaf_board_output_finish();
+        CHECK(!eaf_board_output_release());
+        wait_done();
+        CHECK(reservoir.frames_read == 2);
+        eaf_board_output_stop();
+        CHECK(!active && !audio.impl && !board_output_failed());
+    }
     return 0;
 }

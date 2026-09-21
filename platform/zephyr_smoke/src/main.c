@@ -16,6 +16,7 @@ static int scheduling_result;
 extern unsigned eaf_mock_commits;
 extern int32_t eaf_mock_last;
 extern bool eaf_mock_fail_write, eaf_mock_fail_start, eaf_mock_fail_drop, eaf_mock_fail_drain;
+extern bool eaf_mock_require_drain;
 extern int eaf_sbc_smoke(void);
 extern int eaf_bt_smoke(void);
 static int packet(void *ctx, const uint8_t *data, size_t length) {
@@ -162,6 +163,9 @@ int main(void) {
             if (tx->ops->commit_buf(tx, b) != (eaf_mock_fail_drain ? EAF_IO : EAF_OK))
                 rc = EAF_IO;
         }
+        if (!rc && eaf_mock_fail_drain && tx->ops->stop(tx) != EAF_IO)
+            rc = EAF_IO;
+        eaf_mock_fail_drain = false; /* Retry cleanup once the backend recovers. */
         if (!rc)
             rc = tx->ops->stop(tx);
     }
@@ -197,6 +201,24 @@ int main(void) {
     }
     if (!rc)
         rc = tx->ops->stop(tx);
+    /* Track cancellation must retire in-flight DMA before DROP, including when
+       the producer owns another uncommitted block. Repeat beyond pool capacity. */
+    eaf_mock_require_drain = true;
+    for (unsigned cycle = 0; !rc && cycle < 10; ++cycle) {
+        rc = tx->ops->start(tx);
+        eaf_buffer_t *b = NULL;
+        if (!rc)
+            rc = tx->ops->acquire_buf(tx, &b);
+        if (!rc) {
+            b->flags = 0;
+            rc = tx->ops->commit_buf(tx, b);
+        }
+        if (!rc)
+            rc = tx->ops->acquire_buf(tx, &b);
+        if (!rc)
+            rc = tx->ops->stop(tx);
+    }
+    eaf_mock_require_drain = false;
     int cleanup = tx->ops->deinit(tx);
     if (!rc)
         rc = cleanup;

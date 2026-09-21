@@ -26,6 +26,9 @@ int eaf_board_output_storage(int32_t **storage, uint32_t *frames);
 /* Format is the source format (1..2 channels). ready_frames is the reservoir
    prefill required before release; held keeps the audio worker gated. */
 int eaf_board_output_start(const eaf_format_t *format, uint32_t ready_frames, bool held);
+/* Transport-owner only: cancel the previous stream (including pending EOF),
+   join its worker and retire DMA before configuring a fresh reservoir. */
+int eaf_board_output_replace(const eaf_format_t *format, uint32_t ready_frames, bool held);
 /* Writes Q1.31 frames; returns the count accepted. */
 uint32_t eaf_board_output_write(const int32_t *samples, uint32_t frames);
 void eaf_board_output_finish(void);

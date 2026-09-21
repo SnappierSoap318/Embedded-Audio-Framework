@@ -47,16 +47,19 @@ static bool have_stream;
 static void apply_volume(void);
 
 static void start_output(const eaf_sendspin_stream_start_t *start) {
+    have_stream = false;
+    eaf_sendspin_player_finish(&player);
     eaf_format_t format = {.sample_rate = start->sample_rate,
                            .num_channels = 2,
                            .channel_mask = EAF_CH_FRONT_LEFT | EAF_CH_FRONT_RIGHT};
     uint32_t capacity = eaf_board_output_capacity_frames();
-    int rc = eaf_board_output_start(&format, capacity * 3u / 4u, false);
+    int rc = eaf_board_output_replace(&format, capacity * 3u / 4u, false);
     if (!rc)
         rc = eaf_sendspin_player_begin(&player, &client.filter, start);
     if (rc) {
         board_log("Stream start failed rc=%d\n", rc);
     } else {
+        have_stream = true;
         apply_volume();
         (void)tas5805m_play();
         board_log("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
@@ -66,7 +69,6 @@ static void start_output(const eaf_sendspin_stream_start_t *start) {
 static void on_stream_start(void *ctx, const eaf_sendspin_stream_start_t *start) {
     (void)ctx;
     current_stream = *start;
-    have_stream = true;
     start_output(start);
 }
 static void on_audio(void *ctx, const eaf_sendspin_stream_start_t *format, int64_t timestamp_us,
@@ -90,8 +92,6 @@ static void on_stream_clear(void *ctx, bool clear_player) {
     (void)ctx;
     if (clear_player && have_stream) {
         board_log("Stream clear; flushing buffered audio\n");
-        eaf_sendspin_player_finish(&player);
-        eaf_board_output_stop();
         start_output(&current_stream);
     }
 }
