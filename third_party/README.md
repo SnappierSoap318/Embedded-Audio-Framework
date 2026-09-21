@@ -38,4 +38,6 @@ Keep this file and `docs/licensing.md` in sync when a vendored file is updated.
 ## Opus
 
 Opus has no single-header decoder, so it is tracked as a git submodule instead
-(see `.gitmodules`, `third_party/opus`). See `docs/licensing.md`.
+(see `.gitmodules`, `third_party/opus`, pinned to tag `v1.6.1`). Builds that
+consume it must initialise submodules (`git submodule update --init`). See
+`docs/licensing.md`.
