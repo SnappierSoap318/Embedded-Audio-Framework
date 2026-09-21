@@ -157,3 +157,60 @@ cmake --build build-phase1 --target eaf_sendspin_probe
 `eaf_sendspin_probe` reaches `player@v1` activation and clock convergence
 against a real MA. Physical WROOM playback (audible PCM, real-time intake) is the
 open Phase 2 gate.
+
+## ESP-IDF backend and smoke target
+
+The ESP-IDF backend lives in `hal/esp_idf/` (`hal_os_esp_idf.c`,
+`hal_tcp_esp_idf.c`, `sink_i2s_esp_idf.c` and the sink header) and mirrors the
+Zephyr adapters: statically pooled FreeRTOS tasks with role-based priorities,
+binary semaphores, `esp_timer` monotonic time, lwIP BSD sockets with
+`TCP_NODELAY`, and a `driver/i2s_std.h` TX channel. The legacy `driver/i2s.h`
+removed in IDF v6 is not used.
+
+Prerequisites: ESP-IDF v6.x with the Xtensa toolchain. The local install is
+v6.0.2; activate it before any command:
+
+```sh
+source ~/.espressif/tools/activate_idf_v6.0.2.sh
+idf.py --version
+```
+
+`platform/esp_idf_sendspin/` is a standalone IDF project. It does not read the
+repository root `CMakeLists.txt`; `components/eaf/CMakeLists.txt` is the manifest
+that selects the portable sources (core, `hal/common`, the PCM and FLAC decoder
+adapters and the vendored `dr_flac` implementation) plus the `hal/esp_idf`
+adapters. `components/main/main.c` is a bounded smoke test: it checks the HAL
+semaphore/thread/clock primitives, binds the I2S sink to the board pins, plays a
+short 440 Hz tone and deinitializes cleanly. Board pins and smoke parameters come
+from `components/main/Kconfig.projbuild`; scheduling and block size come from
+`components/eaf/Kconfig`. The FreeRTOS tick defaults to 1000 Hz via
+`sdkconfig.defaults`.
+
+Build, flash and monitor for the classic `esp32` target (selected in
+`sdkconfig.defaults`):
+
+```sh
+cd platform/esp_idf_sendspin
+idf.py set-target esp32
+idf.py build
+idf.py -p /dev/ttyUSB0 flash monitor
+```
+
+The defaults match the WROVER + TAS5805M carrier (WS=25, BCLK=26, DOUT=22). Run
+`idf.py menuconfig` to change pins or priorities. Note that FreeRTOS ranks a
+larger numeric priority higher, so `CONFIG_EAF_AUDIO_PRIORITY` must exceed
+`CONFIG_EAF_DECODER_PRIORITY`; this is the opposite ordering from the Zephyr
+Kconfig symbols.
+
+The I2S sink requests an APLL clock for `adjust_ppm` and falls back to the
+default PLL if the APLL initialization fails, returning `EAF_UNSUPPORTED` for
+rate adjustment in that case. The drain on EOS or pause is a bounded
+DMA-residency settle, not a presentation timestamp, so the physical FIFO/amp tail
+still needs a board measurement. Choosing an IDF target with different
+capabilities or pin mapping requires a project under `platform/esp_idf_*` with
+its own `sdkconfig.defaults` and board Kconfig.
+
+Platform selection is by build system, never by `#ifdef CONFIG_*` in owned
+translation units: Zephyr's `platform/esp32_*` CMake/Kconfig selects
+`hal/zephyr` and `platform/esp32_output`; the ESP-IDF project's component
+manifest selects `hal/esp_idf`; the native Linux build selects `hal/linux`.

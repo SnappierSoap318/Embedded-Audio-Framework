@@ -1,0 +1,36 @@
+menu "EAF framework"
+
+config EAF_THREAD_COUNT
+    int "EAF static thread slots"
+    default 4
+    range 1 16
+
+config EAF_THREAD_STACK_SIZE
+    int "EAF worker stack size in bytes"
+    default 4096
+    range 1024 65536
+
+config EAF_SEM_COUNT
+    int "EAF static binary semaphore slots"
+    default 4
+    range 1 16
+
+config EAF_AUDIO_PRIORITY
+    int "FreeRTOS priority for EAF audio workers"
+    default 10
+    range 1 24
+    help
+      FreeRTOS preempts lower numeric priorities, so this must exceed
+      CONFIG_EAF_DECODER_PRIORITY and stay below configMAX_PRIORITIES (25).
+
+config EAF_DECODER_PRIORITY
+    int "FreeRTOS priority for EAF decoder workers"
+    default 8
+    range 1 23
+
+config EAF_I2S_MAX_FRAMES
+    int "Maximum I2S block size in frames per channel"
+    default 128
+    range 16 1024
+
+endmenu

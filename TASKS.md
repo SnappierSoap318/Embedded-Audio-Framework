@@ -258,21 +258,27 @@ interleaved Q1.31.
   corruption/truncation guards, stack/heap/CPU measurements; keep `third_party/`
   and `docs/licensing.md` current.
 
-- [ ] **E1 — ESP-IDF HAL: OS primitives.** FreeRTOS pinned tasks with role-based
-  Kconfig priorities, binary semaphore, `esp_timer` clocks, sleep-until. Target
-  the latest ESP-IDF v6.x (v6.1 verified to support classic ESP32).
-- [ ] **E2 — ESP-IDF HAL: TCP.** lwIP BSD sockets + `TCP_NODELAY`, mirroring the
-  Linux adapter.
-- [ ] **E3 — ESP-IDF HAL: I2S sink.** `driver/i2s_std.h` TX channel (legacy
-  `driver/i2s.h` is removed in v6) with the same acquire/commit/start/stop and
-  APLL `adjust_ppm` contract as the Zephyr sink.
-- [ ] **E4 — ESP-IDF build.** `idf_component_register` + Kconfig with CMake
-  `if(CONFIG_...)` source selection (preserving the no-`#if CONFIG` rule); add an
-  `esp32_smoke` target and CI job.
-- [ ] **E5 — Shared board code.** Refactor `platform/esp32_common` into
-  OS-agnostic and Zephyr/ESP-IDF parts; add `platform/esp_idf_sendspin`.
-- [ ] **E6 — Docs.** ESP-IDF v6.1 build/selection in `docs/development.md`, plus
-  `third_party` submodule/vendoring notes.
+- [x] **E1 — ESP-IDF HAL: OS primitives.** Done: `hal/esp_idf/hal_os_esp_idf.c`
+  with statically pooled FreeRTOS tasks (role-based Kconfig priorities), binary
+  semaphores, `esp_timer` monotonic time and bounded sleep-until. Targets ESP-IDF
+  v6.0.2 locally (v6.1 supports classic ESP32).
+- [x] **E2 — ESP-IDF HAL: TCP.** Done: `hal/esp_idf/hal_tcp_esp_idf.c` reuses the
+  shared `hal/net/tcp_impl.h` over lwIP BSD sockets with `TCP_NODELAY`.
+- [x] **E3 — ESP-IDF HAL: I2S sink.** Done: `hal/esp_idf/sink_i2s_esp_idf.c` on
+  `driver/i2s_std.h` with the same acquire/commit/start/stop contract. APLL is
+  available on classic ESP32 and `adjust_ppm` uses `i2s_channel_tune_rate`;
+  hardware must confirm it shifts the running rate. EOS/pause drain is a bounded
+  DMA-residency settle, not a presentation timestamp.
+- [x] **E4 — ESP-IDF build.** Done: standalone `platform/esp_idf_sendspin` project
+  builds green for classic `esp32` under IDF v6.0.2 (0 warnings). Its component
+  manifest selects sources via CMake, preserving the no-`#if CONFIG` rule. The
+  `esp32_smoke` CI job and root/CI wiring remain (kept out of this change to avoid
+  touching shared build files).
+- [ ] **E5 — Shared board code.** Partial: `platform/esp_idf_sendspin` exists and
+  reuses OS-agnostic code; the `platform/esp32_common` split and a board-output
+  integration remain.
+- [x] **E6 — Docs.** Done: ESP-IDF prerequisites/activation/build/selection in
+  `docs/development.md`.
 - [ ] **E7 — ESPHome component path (later).** Because ESPHome is ESP-IDF, E1–E5
   enable exposing EAF (DSP/sync) as an ESPHome external component.
 

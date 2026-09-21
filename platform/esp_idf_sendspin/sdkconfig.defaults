@@ -1,0 +1,7 @@
+CONFIG_IDF_TARGET="esp32"
+# 1 ms tick gives the HAL's millisecond sleeps and role priorities useful
+# resolution; the default 100 Hz tick would round every short wait to 10 ms.
+CONFIG_FREERTOS_HZ=1000
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y

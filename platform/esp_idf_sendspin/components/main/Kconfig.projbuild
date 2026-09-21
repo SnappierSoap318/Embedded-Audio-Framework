@@ -1,0 +1,27 @@
+menu "EAF ESP-IDF Sendspin board"
+
+config EAF_I2S_BCLK_GPIO
+    int "I2S BCLK GPIO"
+    default 26
+    help
+      Defaults match the WROVER + TAS5805M carrier: WS=25, BCLK=26, DOUT=22.
+
+config EAF_I2S_WS_GPIO
+    int "I2S WS (LRCLK) GPIO"
+    default 25
+
+config EAF_I2S_DOUT_GPIO
+    int "I2S serial data output GPIO"
+    default 22
+
+config EAF_SMOKE_SAMPLE_RATE
+    int "Smoke-test sample rate"
+    default 44100
+    range 8000 192000
+
+config EAF_SMOKE_BLOCKS
+    int "Smoke-test tone blocks"
+    default 64
+    range 1 100000
+
+endmenu
