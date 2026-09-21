@@ -124,8 +124,9 @@ static void test_decode(void) {
     masked[3] = 0x22u;
     masked[4] = 0x33u;
     masked[5] = 0x44u;
+    static const uint8_t payload[] = "hello";
     for (size_t i = 0; i < 5; ++i)
-        masked[6 + i] = (uint8_t)((uint8_t)"hello"[i] ^ masked[2 + (i & 3u)]);
+        masked[6 + i] = (uint8_t)(payload[i] ^ masked[2 + (i & 3u)]);
     feed_all(&rx, masked, 11, on_message);
     CHECK(messages == 3 && last_opcode == EAF_SENDPIN_WS_TEXT && last_length == 5 &&
           !memcmp(last_payload, "hello", 5));

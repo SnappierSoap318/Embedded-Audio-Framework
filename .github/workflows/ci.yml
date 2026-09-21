@@ -9,21 +9,25 @@ on:
 permissions:
   contents: read
 
+env:
+  # Match the toolchain used by the project's clang-format/clang-tidy config.
+  LLVM_VERSION: "22"
+
 jobs:
   build-test:
-    name: Build and test (host, Clang)
+    name: Build and test (host)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build python3 clang-18
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- "$LLVM_VERSION"
+          sudo apt-get install -y cmake ninja-build python3 clang-"$LLVM_VERSION"
       - name: Configure
         run: |
           cmake -S . -B build-ci -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_C_COMPILER=clang-"$LLVM_VERSION" \
             -DEAF_ENABLE_ALSA=OFF \
             -DBUILD_TESTING=ON \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -39,13 +43,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build python3 clang-18
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- "$LLVM_VERSION"
+          sudo apt-get install -y cmake ninja-build python3 clang-"$LLVM_VERSION"
       - name: Configure
         run: |
           cmake -S . -B build-asan -G Ninja \
             -DCMAKE_BUILD_TYPE=Debug \
-            -DCMAKE_C_COMPILER=clang-18 \
+            -DCMAKE_C_COMPILER=clang-"$LLVM_VERSION" \
             -DEAF_SANITIZE=ON \
             -DEAF_ENABLE_ALSA=OFF \
             -DBUILD_TESTING=ON
@@ -61,13 +65,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install toolchain
         run: |
-          sudo apt-get update
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- "$LLVM_VERSION"
           sudo apt-get install -y cmake ninja-build python3 \
-            clang-18 clang-tools-18 clang-format-18 clang-tidy-18
-          sudo ln -sf /usr/bin/clang-18 /usr/local/bin/clang
-          sudo ln -sf /usr/bin/clangd-18 /usr/local/bin/clangd
-          sudo ln -sf /usr/bin/clang-format-18 /usr/local/bin/clang-format
-          sudo ln -sf /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy
+            clang-"$LLVM_VERSION" clang-tools-"$LLVM_VERSION" \
+            clang-format-"$LLVM_VERSION" clang-tidy-"$LLVM_VERSION"
+          sudo ln -sf "/usr/bin/clang-$LLVM_VERSION" /usr/local/bin/clang
+          sudo ln -sf "/usr/bin/clangd-$LLVM_VERSION" /usr/local/bin/clangd
+          sudo ln -sf "/usr/bin/clang-format-$LLVM_VERSION" /usr/local/bin/clang-format
+          sudo ln -sf "/usr/bin/clang-tidy-$LLVM_VERSION" /usr/local/bin/clang-tidy
       - name: Configure
         run: |
           cmake -S . -B build-lint -G Ninja \
