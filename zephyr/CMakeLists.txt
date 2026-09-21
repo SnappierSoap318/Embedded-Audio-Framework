@@ -16,7 +16,7 @@ if(CONFIG_EAF)
     ../core/eaf_control.c ../core/eaf_dsp.c ../core/eaf_sync.c ../core/eaf_decoder.c
     ../hal/common/hal_atomic_c11.c ../hal/common/sink_null.c
     ../hal/zephyr/hal_os_zephyr.c ../apps/player/eaf_player.c
-    ../apps/decoders/dec_wav.c)
+    ../apps/decoders/dec_wav.c ../apps/decoders/dec_pcm.c)
   if(CONFIG_SCHED_CPU_MASK)
     zephyr_library_sources(../hal/zephyr/cpu_pin.c)
   else()

@@ -1,3 +1,4 @@
+#include <eaf/eaf_dec_pcm.h>
 #include <eaf/eaf_decoder.h>
 #include <stdio.h>
 #include <string.h>
@@ -254,8 +255,69 @@ static int test_worker_pull_error_recovers(void) {
     return 0;
 }
 
+static int test_pcm_adapter(void) {
+    static eaf_decoder_pcm_t state;
+    eaf_decoder_t d = {.ops = &eaf_decoder_pcm_ops, .ctx = &state};
+    eaf_format_t out = output_format();
+    eaf_decoder_config_t cfg = {
+        .codec = EAF_CODEC_PCM, .sample_rate = 44100, .channels = 2, .bit_depth = 16};
+    int32_t pcm[8];
+    uint32_t frames = 0;
+    eaf_format_t fmt = {0};
+    size_t consumed = 0;
+
+    /* Stereo 16-bit, with a frame split across two pushes. */
+    CHECK(eaf_decoder_open(&d, &cfg, &out) == EAF_OK);
+    const uint8_t stereo[8] = {0x00, 0x80, 0xFF, 0x7F, 0x00, 0x00, 0x00, 0x40};
+    CHECK(eaf_decoder_push(&d, stereo, 6, &consumed) == EAF_OK);
+    CHECK(consumed == 6);
+    CHECK(eaf_decoder_pull(&d, pcm, 8, &frames, &fmt) == EAF_OK);
+    CHECK(frames == 1);
+    CHECK(eaf_format_equal(&fmt, &out));
+    CHECK(pcm[0] == eaf_pcm16_to_q31((int16_t)-32768));
+    CHECK(pcm[1] == eaf_pcm16_to_q31(32767));
+    CHECK(eaf_decoder_push(&d, stereo + 6, 2, &consumed) == EAF_OK);
+    CHECK(consumed == 2);
+    CHECK(eaf_decoder_pull(&d, pcm, 8, &frames, &fmt) == EAF_OK);
+    CHECK(frames == 1);
+    CHECK(pcm[0] == 0);
+    CHECK(pcm[1] == eaf_pcm16_to_q31(16384));
+    eaf_decoder_close(&d);
+
+    /* Mono 16-bit upmixes to stereo. */
+    cfg.channels = 1;
+    CHECK(eaf_decoder_open(&d, &cfg, &out) == EAF_OK);
+    const uint8_t mono[4] = {0xE8, 0x03, 0xD0, 0x07}; /* 1000, 2000 */
+    CHECK(eaf_decoder_push(&d, mono, sizeof(mono), &consumed) == EAF_OK);
+    CHECK(consumed == sizeof(mono));
+    CHECK(eaf_decoder_pull(&d, pcm, 8, &frames, &fmt) == EAF_OK);
+    CHECK(frames == 2);
+    CHECK(pcm[0] == eaf_pcm16_to_q31(1000) && pcm[1] == eaf_pcm16_to_q31(1000));
+    CHECK(pcm[2] == eaf_pcm16_to_q31(2000) && pcm[3] == eaf_pcm16_to_q31(2000));
+    eaf_decoder_close(&d);
+
+    /* Stereo 24-bit sign extension. */
+    cfg.channels = 2;
+    cfg.bit_depth = 24;
+    CHECK(eaf_decoder_open(&d, &cfg, &out) == EAF_OK);
+    const uint8_t stereo24[6] = {0xFF, 0xFF, 0x7F, 0x00, 0x00, 0x80};
+    CHECK(eaf_decoder_push(&d, stereo24, sizeof(stereo24), &consumed) == EAF_OK);
+    CHECK(eaf_decoder_pull(&d, pcm, 8, &frames, &fmt) == EAF_OK);
+    CHECK(frames == 1);
+    CHECK(pcm[0] == eaf_pcm24_to_q31(8388607));
+    CHECK(pcm[1] == eaf_pcm24_to_q31(-8388608));
+    eaf_decoder_close(&d);
+
+    /* Rate mismatch and a channel change beyond mono-to-stereo are rejected. */
+    cfg.bit_depth = 16;
+    eaf_format_t other = out;
+    other.sample_rate = 48000;
+    CHECK(eaf_decoder_open(&d, &cfg, &other) == EAF_UNSUPPORTED);
+    return 0;
+}
+
 int main(void) {
-    if (test_dispatch_validation() || test_worker_backpressure() ||
+    if (test_pcm_adapter() || test_dispatch_validation() || test_worker_backpressure() ||
         test_worker_reset_drops_pending() || test_worker_format_mismatch() ||
         test_worker_pull_error_recovers())
         return 1;

@@ -33,7 +33,7 @@ endif()
 add_library(eaf STATIC core/eaf_types.c core/eaf_reservoir.c core/eaf_graph.c core/eaf_control.c
   core/eaf_dsp.c core/eaf_sync.c core/eaf_decoder.c hal/common/hal_atomic_c11.c hal/linux/hal_os_linux.c
   hal/linux/hal_file_linux.c hal/common/sink_null.c hal/linux/hal_tcp_linux.c
-  apps/decoders/dec_wav.c apps/player/eaf_player.c)
+  apps/decoders/dec_wav.c apps/decoders/dec_pcm.c apps/player/eaf_player.c)
 target_include_directories(eaf PUBLIC include)
 target_link_libraries(eaf PUBLIC Threads::Threads m)
 if(EAF_ENABLE_LMS)
