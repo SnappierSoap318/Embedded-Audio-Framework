@@ -56,6 +56,8 @@ int eaf_sendspin_player_begin(eaf_sendspin_player_t *player,
     player->rate_ppm = 0;
     player->rate_update_us = 0;
     player->resample_credit = 0.0;
+    player->rate_calibration = 0;
+    player->rate_calibration_sum = 0.0;
     eaf_sync_controller_reset(&player->controller);
     return EAF_OK;
 }
@@ -64,12 +66,17 @@ void eaf_sendspin_player_set_rate_control(eaf_sendspin_player_t *player, double 
     if (!player)
         return;
     player->rate_control = true;
-    player->target_latency_us = target_latency_ms * 1000.0;
+    player->rate_auto_target = target_latency_ms <= 0.0;
+    player->target_latency_us = player->rate_auto_target ? 0.0 : target_latency_ms * 1000.0;
     player->rate_ppm = 0;
     player->rate_update_us = 0;
     player->resample_credit = 0.0;
-    /* Gains are a starting point; the actuator limit bounds the correction. */
-    eaf_sync_controller_init(&player->controller, 2.0, 0.5, 200.0);
+    player->rate_calibration = 0;
+    player->rate_calibration_sum = 0.0;
+    /* Gains are a starting point; the actuator limit bounds the correction.
+       A slow integral avoids winding up on the small systematic offset between
+       the latched target and the server's steady state. */
+    eaf_sync_controller_init(&player->controller, 2.0, 0.1, 300.0);
 }
 
 /* Update the drift controller at most every 100 ms and return the output/input
@@ -83,7 +90,22 @@ static double update_rate(eaf_sendspin_player_t *player) {
     player->rate_update_us = now;
     if (dt <= 0.0)
         return eaf_sync_ppm_to_ratio((double)player->rate_ppm);
+    if (player->rate_auto_target) {
+        /* Latch the target to the first stable measurements instead of an
+           absolute lead the server may not target exactly. */
+        if (player->last_latency_us > 0) {
+            player->rate_calibration_sum += (double)player->last_latency_us;
+            if (++player->rate_calibration >= 8u) {
+                player->target_latency_us = player->rate_calibration_sum / 8.0;
+                player->rate_auto_target = false;
+            }
+        }
+        return 1.0;
+    }
     double error_ms = (player->target_latency_us - (double)player->last_latency_us) / 1000.0;
+    /* Ignore sub-millisecond jitter so the integral tracks real drift only. */
+    if (error_ms > -1.0 && error_ms < 1.0)
+        error_ms = 0.0;
     player->rate_ppm = (int32_t)eaf_sync_controller_update(&player->controller, error_ms, dt);
     return eaf_sync_ppm_to_ratio((double)player->rate_ppm);
 }

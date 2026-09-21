@@ -214,7 +214,7 @@ int main(void) {
     uint32_t capacity = eaf_board_output_capacity_frames();
     uint32_t capacity_ms = capacity * 1000u / CONFIG_EAF_SAMPLE_RATE;
     if (IS_ENABLED(CONFIG_EAF_BOARD_RATE_CONTROL))
-        eaf_sendspin_player_set_rate_control(&player, (double)capacity_ms);
+        eaf_sendspin_player_set_rate_control(&player, 0.0); /* auto target */
     eaf_sendspin_config_t config = {.client_id = CONFIG_EAF_BOARD_CLIENT_ID,
                                     .name = CONFIG_EAF_BOARD_NAME,
                                     .product_name = CONFIG_EAF_BOARD_NAME,

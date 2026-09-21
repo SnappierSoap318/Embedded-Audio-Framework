@@ -22,8 +22,9 @@ typedef struct {
     uint32_t frames_written, frames_dropped, chunks;
     /* Multiroom drift control: hold presentation latency at a target by
        resampling what is written into the sink. Disabled by default. */
-    bool rate_control;
-    double target_latency_us, resample_credit;
+    bool rate_control, rate_auto_target;
+    double target_latency_us, resample_credit, rate_calibration_sum;
+    uint32_t rate_calibration;
     int32_t rate_ppm;
     int64_t rate_update_us;
     eaf_sync_controller_t controller;
@@ -35,8 +36,10 @@ int eaf_sendspin_player_begin(eaf_sendspin_player_t *player,
                               const eaf_sendspin_time_filter_t *filter,
                               const eaf_sendspin_stream_start_t *start);
 /* Enable multiroom drift control. The controller holds the measured
-   presentation latency at target_latency_ms by resampling the PCM written to
-   the sink; call before playback. Disabled until called. */
+   presentation latency by resampling the PCM written to the sink; call before
+   playback. A positive target_latency_ms fixes the target; zero or negative
+   latches it to the average of the first converging measurements, which avoids
+   fighting the server's own scheduling. Disabled until called. */
 void eaf_sendspin_player_set_rate_control(eaf_sendspin_player_t *player, double target_latency_ms);
 /* Converts PCM16 and hands stereo Q1.31 to the sink; the sink's unaccepted
    remainder is counted as dropped. Audio whose scheduled client play time has
