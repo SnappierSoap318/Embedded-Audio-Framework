@@ -262,9 +262,13 @@ interleaved Q1.31.
   serviced by a decode thread (inline decode currently stages the whole stream);
   packet/`pushdata` codecs (Opus/Vorbis) already stream. The board app still
   advertises/selects adapters only as far as the Zephyr profile wires them.
-- [ ] **C8 — Tests and licensing.** Host fixtures (flac/opus/vorbis available),
-  corruption/truncation guards, stack/heap/CPU measurements; keep `third_party/`
-  and `docs/licensing.md` current.
+- [ ] **C8 — Tests and licensing.** Host fixtures in place (flac/mp3/ogg/sbc).
+  MP3/Vorbis/Opus tests now assert fixture invariants (channel inversion,
+  fundamental frequency, signal power) rather than only energy; FLAC stays
+  sample-exact. `tests/test_codec_corrupt.c` fuzzes garbage, truncation and
+  header bit flips through every adapter and passes under ASan/UBSan. Still
+  open: stack/heap/CPU measurements on the MCU, and keeping `docs/licensing.md`
+  current as fallbacks change.
 
 - [x] **E1 — ESP-IDF HAL: OS primitives.** Done: `hal/esp_idf/hal_os_esp_idf.c`
   with statically pooled FreeRTOS tasks (role-based Kconfig priorities), binary

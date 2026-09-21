@@ -177,6 +177,13 @@ if(BUILD_TESTING)
   target_link_libraries(test_dec_vorbis PRIVATE eaf)
   add_test(NAME dec_vorbis COMMAND test_dec_vorbis ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.ogg)
   set_tests_properties(dec_vorbis PROPERTIES TIMEOUT 30)
+  add_executable(test_codec_corrupt tests/test_codec_corrupt.c)
+  target_link_libraries(test_codec_corrupt PRIVATE eaf)
+  add_test(NAME codec_corrupt COMMAND test_codec_corrupt
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.flac
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.mp3
+    ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.ogg)
+  set_tests_properties(codec_corrupt PROPERTIES TIMEOUT 30)
   if(EAF_ENABLE_SENDPIN)
     add_executable(test_sendspin_sync tests/test_sendspin_sync.c)
     target_link_libraries(test_sendspin_sync PRIVATE eaf)

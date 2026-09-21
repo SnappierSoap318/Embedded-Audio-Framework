@@ -1,3 +1,4 @@
+#include "tone_check.h"
 #include <eaf/eaf_dec_opus.h>
 #include <eaf/eaf_decoder.h>
 #include <math.h>
@@ -80,9 +81,13 @@ int main(void) {
     CHECK(input_energy > 0.0);
     double ratio = output_energy / input_energy;
     CHECK(ratio > 0.5 && ratio < 2.0);
+    /* The 1 kHz tone must survive the round trip as the dominant component. */
+    double dominant = eaf_test_dominant_hz(decoded, decoded_count, 2, 0, RATE, 800.0, 1200.0, 2.0);
+    CHECK(dominant > 950.0 && dominant < 1050.0);
 
     eaf_decoder_close(&decoder);
     opus_encoder_destroy(encoder);
-    printf("opus decode ok (%u frames, energy ratio %.3f)\n", decoded_count, ratio);
+    printf("opus decode ok (%u frames, energy ratio %.3f, %.1f Hz)\n", decoded_count, ratio,
+           dominant);
     return 0;
 }
