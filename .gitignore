@@ -9,5 +9,7 @@ tags
 *.orig
 *.rej
 *.local.h
+*.local.conf
+local.conf
 /platform/esp32_lms/credentials.local.h
 /platform/esp32_sendspin/credentials.local.h

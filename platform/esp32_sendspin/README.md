@@ -7,12 +7,31 @@ for stereo) and the WROVER with TAS5805M (the current audible target). See
 [docs/bench/sendspin-capture-2026-09-13.md](../../docs/bench/sendspin-capture-2026-09-13.md)
 and [docs/sendspin-plan.md](../../docs/sendspin-plan.md).
 
-## Build
+## Configuration
 
 Copy `credentials.example.h` to `credentials.local.h` and set the 2.4 GHz WPA2
-SSID/passphrase. `CONFIG_EAF_BOARD_SERVER` (default `192.168.11.132`) and
-`CONFIG_EAF_BOARD_PORT` (default `8927`) select the server. Credentials are
-compiled into the firmware; treat build folders and images as private.
+SSID/passphrase (ignored by git). Credentials are compiled into the firmware;
+treat build folders and images as private.
+
+The server address and player identity are Kconfig options:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `CONFIG_EAF_BOARD_SERVER` | `""` (required) | Music Assistant IPv4 address |
+| `CONFIG_EAF_BOARD_PORT` | `8927` | Sendspin WebSocket port |
+| `CONFIG_EAF_BOARD_NAME` | `EAF Sendspin` | Name shown in Music Assistant |
+| `CONFIG_EAF_BOARD_CLIENT_ID` | `eaf-sendspin` | Stable player identifier |
+
+Provide local values in an untracked `local.conf` next to this README:
+
+```conf
+CONFIG_EAF_BOARD_SERVER="192.168.1.10"
+CONFIG_EAF_BOARD_NAME="Living Room"
+```
+
+## Build
+
+```sh
 
 ```sh
 export PATH="$PWD/build-deps/venv/bin:$PATH"
@@ -20,6 +39,7 @@ export ZEPHYR_BASE="$PWD/build-deps/zephyr"
 export ZEPHYR_SDK_INSTALL_DIR="$PWD/build-deps/zephyr-sdk-0.17.4"
 cmake -S platform/esp32_sendspin -B build-wroom-sendspin -G Ninja \
   -DBOARD=esp32_devkitc/esp32/procpu -DZEPHYR_TOOLCHAIN_VARIANT=zephyr \
+  -DEXTRA_CONF_FILE=local.conf \
   -DPython3_EXECUTABLE="$PWD/build-deps/venv/bin/python" \
   "-DZEPHYR_MODULES=$PWD;$PWD/build-deps/hal-espressif;$PWD/build-deps/mbedtls" \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -27,7 +47,7 @@ cmake --build build-wroom-sendspin
 ```
 
 Add `-DEXTRA_CONF_FILE=null.conf` for a silent connectivity build. For the
-WROVER PSRAM profile add `-DEXTRA_CONF_FILE=psram.conf` and
+WROVER PSRAM profile add `-DEXTRA_CONF_FILE=psram.conf;local.conf` and
 `-DEXTRA_DTC_OVERLAY_FILE=psram.overlay`, which enables 8 MB SPI RAM and moves a
 65536-frame (~1.5 s) reservoir to the external heap; the WROOM profile keeps the
 4096-frame (~93 ms) reservoir in internal RAM.
@@ -47,7 +67,8 @@ advertises stereo. The board always expands the source to stereo for the sink.
 - Binary Type-4 chunks are written to the reservoir; the audio worker feeds the
   DSP pipeline and I2S sink.
 
-Select **EAF Sendspin WROOM** in Music Assistant and play a track. UART logs
+Select the player by its configured `CONFIG_EAF_BOARD_NAME` in Music Assistant
+and play a track. UART logs
 report `chunks/written/dropped/underruns` every 5 seconds.
 
 ## OTA updates (optional, MCUboot)
@@ -74,7 +95,7 @@ cmake --build build-mcuboot-esp32
 # App with OTA
 cmake -S platform/esp32_sendspin -B build-wrover-ota -G Ninja \
   -DBOARD=esp32_devkitc/esp32/procpu -DZEPHYR_TOOLCHAIN_VARIANT=zephyr \
-  "-DEXTRA_CONF_FILE=psram.conf;ota.conf" -DEXTRA_DTC_OVERLAY_FILE=psram.overlay \
+  "-DEXTRA_CONF_FILE=psram.conf;ota.conf;local.conf" -DEXTRA_DTC_OVERLAY_FILE=psram.overlay \
   -DPython3_EXECUTABLE="$PWD/build-deps/venv/bin/python" \
   "-DZEPHYR_MODULES=$PWD;$PWD/build-deps/hal-espressif;$PWD/build-deps/mbedtls;$PWD/build-deps/mcuboot"
 cmake --build build-wrover-ota

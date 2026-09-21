@@ -7,9 +7,28 @@ config EAF_BOARD_I2S
     default y
     select I2S
     select EAF_I2S
+config EAF_BOARD_NAME
+    string "Player name advertised to the server"
+    default "EAF Sendspin"
+    help
+      Human-readable name shown in Music Assistant. Set a distinct value per
+      board so multiple players are easy to tell apart.
+
+config EAF_BOARD_CLIENT_ID
+    string "Sendspin client identifier"
+    default "eaf-sendspin"
+    help
+      Stable identifier for this player. Changing it makes the server treat
+      the board as a new player.
+
 config EAF_BOARD_SERVER
     string "Sendspin server numeric IPv4 address"
-    default "192.168.11.132"
+    default ""
+    help
+      Music Assistant host IPv4 address. Required; the board logs an error and
+      stops when it is empty. Provide it locally, for example with a local
+      override file passed as -DEXTRA_CONF_FILE=local.conf containing
+      CONFIG_EAF_BOARD_SERVER="192.168.1.10".
 config EAF_BOARD_PORT
     int "Sendspin server port"
     default 8927

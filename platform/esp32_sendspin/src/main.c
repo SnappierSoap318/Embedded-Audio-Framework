@@ -188,8 +188,11 @@ int main(void) {
         return 1;
     }
     struct in_addr server;
-    if (net_addr_pton(AF_INET, CONFIG_EAF_BOARD_SERVER, &server))
+    if (!strlen(CONFIG_EAF_BOARD_SERVER) ||
+        net_addr_pton(AF_INET, CONFIG_EAF_BOARD_SERVER, &server)) {
+        board_log("Set CONFIG_EAF_BOARD_SERVER to the Music Assistant IPv4 address\n");
         return 1;
+    }
 
     int32_t *storage;
     uint32_t frames;
@@ -210,9 +213,9 @@ int main(void) {
 
     uint32_t capacity = eaf_board_output_capacity_frames();
     uint32_t capacity_ms = capacity * 1000u / CONFIG_EAF_SAMPLE_RATE;
-    eaf_sendspin_config_t config = {.client_id = "eaf-sendspin-wroom",
-                                    .name = "EAF Sendspin WROOM",
-                                    .product_name = "EAF Sendspin WROOM",
+    eaf_sendspin_config_t config = {.client_id = CONFIG_EAF_BOARD_CLIENT_ID,
+                                    .name = CONFIG_EAF_BOARD_NAME,
+                                    .product_name = CONFIG_EAF_BOARD_NAME,
                                     .manufacturer = "EAF",
                                     .software_version = "phase2",
                                     .sample_rate = CONFIG_EAF_SAMPLE_RATE,

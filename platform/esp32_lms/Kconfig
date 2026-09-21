@@ -9,7 +9,12 @@ config EAF_BOARD_I2S
     select EAF_I2S
 config EAF_BOARD_SERVER
     string "LMS numeric IPv4 address"
-    default "192.168.11.132"
+    default ""
+    help
+      Lyrion Music Server IPv4 address. Required. Provide it locally, for
+      example with a local override file passed as
+      -DEXTRA_CONF_FILE=local.conf containing
+      CONFIG_EAF_BOARD_SERVER="192.168.1.10".
 config EAF_BOARD_WIFI_PS_NONE
     bool "Disable Wi-Fi modem sleep for lower latency"
     default y
