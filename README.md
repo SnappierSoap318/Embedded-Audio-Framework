@@ -41,6 +41,7 @@ cmake --build build-tsan && ctest --test-dir build-tsan --output-on-failure
 | Embedded/Zephyr | [embedded scope](docs/embedded.md), [hardware roadmap](docs/hardware-roadmap.md), [Bluetooth](docs/bluetooth.md) |
 | Players | [Sendspin plan](docs/sendspin-plan.md), [playback API](docs/playback.md), [Linux audio](docs/linux-audio.md) |
 | Reviews | [streaming audit 2026-09-13](docs/streaming-audit-2026-09-13.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md), [license (GPL-3.0)](LICENSE) |
 
 ### Board applications
 
@@ -142,6 +143,16 @@ credentials, PSRAM profiles, flashing and OTA.
 
 Zephyr module integration is in `zephyr/`; `west.yml` pins Zephyr 4.3.0 and the
 sample adds this repository as an extra module.
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+prerequisites, the build/test/lint commands, the design constraints to
+preserve, and the hardware-testing rules.
+
+Parts of this project were developed with AI assistance (DeepSeek and GPT
+Astra). Every generated change is reviewed, built and tested before it is
+committed; see the disclosure in [CONTRIBUTING.md](CONTRIBUTING.md#ai-assisted-development).
 
 ## Scope
 
