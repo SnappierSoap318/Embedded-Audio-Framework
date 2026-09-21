@@ -176,11 +176,12 @@ encrypted revision is a separate, later target.
   qualified baseline. Implemented: `CONFIG_EAF_BIT_DEPTH` (16/24/32) advertises
   the precision, the producer decodes PCM16/24/32 into Q1.31 with host vectors,
   and the TAS5805M is set to 32-bit I2S words (SAP_CTRL1). 48 kHz/24-bit stereo
-  is confirmed audible on the WROVER (2026-09-21, `rx≈288 kB/s`, zero
-  underruns). Remaining: verify clocks, channel order and gain/headroom on
-  hardware; display the negotiated network format separately from the DSP/I2S
-  precision; qualify 48 kHz/32-bit with sustained throughput/buffer/timing
-  measurements; then evaluate 88.2/96 kHz. Validate sample boundaries, sign extension and format
+  is audible on the WROVER (2026-09-21), but the ~288 kB/s payload exceeds this
+  Wi-Fi link: `rx` dips to 118-155 kB/s and buffers starve after ~45 s, so
+  44.1 kHz/16-bit (176 kB/s) remains the reliable rate. Remaining: verify
+  clocks, channel order and gain/headroom on hardware; display the negotiated
+  network format separately from the DSP/I2S precision; qualify 48 kHz/32-bit
+  only if the link can sustain it; then evaluate 88.2/96 kHz. Validate sample boundaries, sign extension and format
   rejection against independently specified vectors. TI specifies up to 96 kHz
   and 32-bit input for TAS5805M, not a 48 kHz ceiling; whole-board support
   remains a measured gate. Wider containers or upsampling must not be presented
@@ -230,9 +231,13 @@ encrypted revision is a separate, later target.
   then measure <1 ms cross-device phase error on physical outputs. Portable
   primitives are implemented in `core/eaf_sync.c` (bounded PI controller with
   anti-windup, and a linear-interpolation resampler) with host tests in
-  `tests/test_sync.c`. Remaining: presentation scheduling, the actuator
-  integration into the output owner (variable reservoir pull + resample to the
-  fixed sink block), and two-device phase measurement.
+  `tests/test_sync.c`. The Sendspin producer applies the controller by resampling
+  the PCM it writes to the sink, holding the measured presentation latency at a
+  self-calibrated target (platform/esp32_sendspin, `CONFIG_EAF_BOARD_RATE_CONTROL`).
+  On hardware at 44.1 kHz/16-bit the loop held latency near 1438 ms for tens of
+  seconds with the correction staying bounded. Remaining: two-device phase
+  measurement (blocked on capture hardware), gain/target tuning, and a decision
+  on 48 kHz/24-bit feasibility given the Wi-Fi throughput limit.
 
 ## Later board and qualification — P1/P2
 
