@@ -4,6 +4,10 @@ __pycache__/
 *.pyc
 compile_commands.json
 .vscode-ctags
+tags
+.env
+*.orig
+*.rej
+*.local.h
 /platform/esp32_lms/credentials.local.h
-
 /platform/esp32_sendspin/credentials.local.h

@@ -213,8 +213,7 @@ are compiled separately with vendor diagnostics disabled.
 
 ## squeezelite-esp32 reference
 
-Reviewed the local checkout at
-`/home/snappy/Desktop/Projects/squeezelite-esp32/squeezelite-esp32`, commit
+Reviewed a local `squeezelite-esp32` checkout at commit
 `1d542bd53cf397661f11c0671553422acdb663ab`. Relevant references are
 `components/squeezelite/{slimproto.c,slimproto.h,stream.c,pcm.c}` and
 `components/driver_bt/bt_app_sink.c`.

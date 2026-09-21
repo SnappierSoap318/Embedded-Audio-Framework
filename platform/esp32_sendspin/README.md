@@ -1,8 +1,9 @@
-# EAF Sendspin board player (WROOM)
+# EAF Sendspin board player (ESP32)
 
-ESP32-WROOM bench app that plays the cleartext Sendspin revision captured from
+ESP32 bench app that plays the cleartext Sendspin revision captured from
 Music Assistant 2.10.3 (`ws://<ma-ip>:8927/sendspin`) through the shared board
-output owner and the I2S sink. See
+output owner and the I2S sink. It runs on the WROOM (Wi-Fi throughput limited
+for stereo) and the WROVER with TAS5805M (the current audible target). See
 [docs/bench/sendspin-capture-2026-09-13.md](../../docs/bench/sendspin-capture-2026-09-13.md)
 and [docs/sendspin-plan.md](../../docs/sendspin-plan.md).
 
@@ -54,6 +55,12 @@ report `chunks/written/dropped/underruns` every 5 seconds.
 The default build uses the ESP32 simple boot, which has no OTA. To update over
 Wi-Fi instead of UART, build the MCUboot profile and install the bootloader once.
 
+> **Known issue:** on the WROVER/TAS5805M bench the MCUboot build accepts four
+> I2S TX buffers and then times out waiting for a buffer to return, so playback
+> stops with `I2S allocate TX block failed ... rc=-11`. Direct boot plays
+> normally. Isolate the bootloader/build difference before relying on OTA. See
+> [docs/bench/wrover-i2s-2026-09-20.md](../../docs/bench/wrover-i2s-2026-09-20.md).
+
 One-time UART install (MCUboot at 0x1000, app in slot0 at 0x20000):
 
 ```sh
@@ -90,5 +97,10 @@ and boots the new image. Partitions (4 MB layout): mcuboot `0x1000`, sys
 ## Qualification
 
 Builds for `native_sim` (null sink) and `esp32_devkitc/esp32/procpu` (I2S).
-Physical audible playback, real-time intake and long-play stability are **not**
-yet verified on hardware; those are the Phase 2 gate.
+
+Physical status (2026-09-20): the WROVER/TAS5805M direct-boot build plays stereo
+44.1 kHz PCM audibly with server-driven volume and held zero underruns across a
+multi-hour run. The MCUboot build still stalls I2S TX buffer completion; see the
+note above. WROOM is throughput-limited for stereo. Remaining gates are release
+qualification (long stress, recovery, synchronized playback), tracked in
+`TASKS.md` (S03/S04/S06/T22/T23).

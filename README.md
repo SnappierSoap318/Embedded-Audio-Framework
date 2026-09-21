@@ -84,6 +84,23 @@ allocations in shared system libraries or establish a whole-process heap bound.
   failure the graph commits silence to release the acquired sink buffer. A sink
   acquire/commit failure must also permit release through its STOP implementation.
 
+## Sendspin player (ESP32 bench)
+
+`platform/esp32_sendspin` is a Wi-Fi speaker application that plays the
+cleartext Sendspin revision captured from Music Assistant 2.10.3. It reuses the
+protocol-agnostic output owner and the I2S sink, and adds server-driven
+volume/mute, a PSRAM jitter buffer and web diagnostics. Portable protocol,
+transport and producer code lives in `apps/sendspin` with host regressions.
+
+On the ESP32-WROVER with a TAS5805M amplifier, direct-boot stereo playback at
+44.1 kHz is audible and sustained long runs show zero underruns. The
+Wi-Fi-only WROOM path is throughput-limited for stereo and is not the target.
+The MCUboot build stalls its I2S TX buffers at stream start; direct boot is the
+current working baseline. Build, flashing and OTA instructions, and the
+hardware findings, are in
+[the board README](platform/esp32_sendspin/README.md) and
+[the I2S bench report](docs/bench/wrover-i2s-2026-09-20.md).
+
 ## Zephyr and network-player development
 
 The Zephyr module, static HAL, I2S adapter and native_sim smoke are now available.
@@ -98,8 +115,10 @@ See [Linux audio setup](docs/linux-audio.md) and [Bluetooth binding](docs/blueto
 ## Scope
 
 Implemented paths include native file playback, Zephyr kernel/HAL integration,
-and a stereo I2S adapter tested with a simulated device. Full LMS transport/HTTP
-player integration, Bluetooth pairing/profile negotiation and LC3 decoding, compressed
-file codecs, PLL/ASRC synchronization and board-specific codec bring-up
-remain unfinished. Neither native_sim nor host tests establish physical DMA
-or multi-room timing guarantees.
+a stereo I2S adapter, a cleartext Sendspin player that is audible on the
+WROVER/TAS5805M bench, and the TCP/HTTP raw-PCM LMS client. Bluetooth
+pairing/profile negotiation and LC3 decoding, compressed file codecs, PLL/ASRC
+synchronization, multi-room timing and release-qualification stress remain
+unfinished. `TASKS.md` is the authoritative remaining-work list. Neither
+native_sim nor host tests establish physical DMA or multi-room timing
+guarantees.
