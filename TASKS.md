@@ -81,6 +81,10 @@ There is no fixed finish date until these scopes and hardware gates are validate
 - [ ] **T09 — I2S drain/recovery and clock behavior.** Implement/verify EOF drain,
   driver queue starvation recovery and clean reconfigure. Scope clocks and prove
   DMA ownership/cache correctness on the actual ESP32 driver.
+  Hardware: WROVER direct-boot track switching and pause/resume are seamless
+  after retiring queued DMA before DROP (2026-09-21, see
+  docs/bench/wrover-i2s-2026-09-20.md). Remaining: cache/DMA-ownership proof and
+  the MCUboot stream-start stall.
 
 ## Streaming stabilization order — current priority
 
