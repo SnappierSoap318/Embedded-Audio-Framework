@@ -13,7 +13,7 @@ if(CONFIG_EAF)
   zephyr_include_directories(${CMAKE_CURRENT_LIST_DIR}/../include)
   zephyr_library_sources(
     ../core/eaf_types.c ../core/eaf_reservoir.c ../core/eaf_graph.c
-    ../core/eaf_control.c ../core/eaf_dsp.c
+    ../core/eaf_control.c ../core/eaf_dsp.c ../core/eaf_sync.c
     ../hal/common/hal_atomic_c11.c ../hal/common/sink_null.c
     ../hal/zephyr/hal_os_zephyr.c ../apps/player/eaf_player.c
     ../apps/decoders/dec_wav.c)

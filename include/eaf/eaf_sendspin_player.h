@@ -1,5 +1,6 @@
 #pragma once
 #include <eaf/eaf_sendspin.h>
+#include <eaf/eaf_sync.h>
 #include <eaf/eaf_types.h>
 
 /* Portable Sendspin producer: converts interleaved PCM16/24/32 chunks to stereo
@@ -19,6 +20,13 @@ typedef struct {
     bool active, synchronized, drop_late;
     int64_t last_latency_us;
     uint32_t frames_written, frames_dropped, chunks;
+    /* Multiroom drift control: hold presentation latency at a target by
+       resampling what is written into the sink. Disabled by default. */
+    bool rate_control;
+    double target_latency_us, resample_credit;
+    int32_t rate_ppm;
+    int64_t rate_update_us;
+    eaf_sync_controller_t controller;
 } eaf_sendspin_player_t;
 
 void eaf_sendspin_player_init(eaf_sendspin_player_t *player, eaf_sendspin_sink_fn sink,
@@ -26,6 +34,10 @@ void eaf_sendspin_player_init(eaf_sendspin_player_t *player, eaf_sendspin_sink_f
 int eaf_sendspin_player_begin(eaf_sendspin_player_t *player,
                               const eaf_sendspin_time_filter_t *filter,
                               const eaf_sendspin_stream_start_t *start);
+/* Enable multiroom drift control. The controller holds the measured
+   presentation latency at target_latency_ms by resampling the PCM written to
+   the sink; call before playback. Disabled until called. */
+void eaf_sendspin_player_set_rate_control(eaf_sendspin_player_t *player, double target_latency_ms);
 /* Converts PCM16 and hands stereo Q1.31 to the sink; the sink's unaccepted
    remainder is counted as dropped. Audio whose scheduled client play time has
    already passed is dropped without conversion. */

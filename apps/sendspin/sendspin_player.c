@@ -53,7 +53,39 @@ int eaf_sendspin_player_begin(eaf_sendspin_player_t *player,
     player->synchronized = false;
     player->last_latency_us = 0;
     player->frames_written = player->frames_dropped = player->chunks = 0;
+    player->rate_ppm = 0;
+    player->rate_update_us = 0;
+    player->resample_credit = 0.0;
+    eaf_sync_controller_reset(&player->controller);
     return EAF_OK;
+}
+
+void eaf_sendspin_player_set_rate_control(eaf_sendspin_player_t *player, double target_latency_ms) {
+    if (!player)
+        return;
+    player->rate_control = true;
+    player->target_latency_us = target_latency_ms * 1000.0;
+    player->rate_ppm = 0;
+    player->rate_update_us = 0;
+    player->resample_credit = 0.0;
+    /* Gains are a starting point; the actuator limit bounds the correction. */
+    eaf_sync_controller_init(&player->controller, 2.0, 0.5, 200.0);
+}
+
+/* Update the drift controller at most every 100 ms and return the output/input
+   ratio. Positive rate_ppm means the sink should receive more frames per input
+   chunk, raising the buffered latency toward the target. */
+static double update_rate(eaf_sendspin_player_t *player) {
+    int64_t now = (int64_t)hal_monotonic_time_us();
+    if (player->rate_update_us && now - player->rate_update_us < 100000)
+        return eaf_sync_ppm_to_ratio((double)player->rate_ppm);
+    double dt = player->rate_update_us ? (double)(now - player->rate_update_us) / 1e6 : 0.0;
+    player->rate_update_us = now;
+    if (dt <= 0.0)
+        return eaf_sync_ppm_to_ratio((double)player->rate_ppm);
+    double error_ms = (player->target_latency_us - (double)player->last_latency_us) / 1000.0;
+    player->rate_ppm = (int32_t)eaf_sync_controller_update(&player->controller, error_ms, dt);
+    return eaf_sync_ppm_to_ratio((double)player->rate_ppm);
 }
 
 int eaf_sendspin_player_write(eaf_sendspin_player_t *player, int64_t server_timestamp_us,
@@ -82,6 +114,10 @@ int eaf_sendspin_player_write(eaf_sendspin_player_t *player, int64_t server_time
     }
 
     int32_t scratch[EAF_SENDPIN_PLAYER_CHUNK_FRAMES * 2u];
+    int32_t resampled[(EAF_SENDPIN_PLAYER_CHUNK_FRAMES + 2u) * 2u];
+    double ratio = 1.0;
+    if (player->rate_control && player->synchronized)
+        ratio = update_rate(player);
     uint32_t index = 0;
     while (index < frames) {
         uint32_t count = frames - index;
@@ -96,10 +132,23 @@ int eaf_sendspin_player_write(eaf_sendspin_player_t *player, int64_t server_time
             scratch[(size_t)2u * i] = left;
             scratch[(size_t)2u * i + 1u] = right;
         }
-        uint32_t written = player->sink(player->sink_ctx, scratch, count);
+        uint32_t produce = count;
+        int32_t *output = scratch;
+        if (ratio != 1.0) {
+            /* Dither the fractional output count so the average rate matches
+               the ratio without a coarse one-frame-per-block quantisation. */
+            double desired = (double)count * ratio + player->resample_credit;
+            produce = (uint32_t)desired;
+            if (produce > count + 2u)
+                produce = count + 2u;
+            player->resample_credit = desired - (double)produce;
+            (void)eaf_sync_resample(scratch, count, resampled, produce, 2u);
+            output = resampled;
+        }
+        uint32_t written = player->sink(player->sink_ctx, output, produce);
         player->frames_written += written;
-        if (written < count) {
-            player->frames_dropped += count - written;
+        if (written < produce) {
+            player->frames_dropped += produce - written;
             break;
         }
         index += count;

@@ -213,6 +213,8 @@ int main(void) {
 
     uint32_t capacity = eaf_board_output_capacity_frames();
     uint32_t capacity_ms = capacity * 1000u / CONFIG_EAF_SAMPLE_RATE;
+    if (IS_ENABLED(CONFIG_EAF_BOARD_RATE_CONTROL))
+        eaf_sendspin_player_set_rate_control(&player, (double)capacity_ms);
     eaf_sendspin_config_t config = {.client_id = CONFIG_EAF_BOARD_CLIENT_ID,
                                     .name = CONFIG_EAF_BOARD_NAME,
                                     .product_name = CONFIG_EAF_BOARD_NAME,
@@ -280,13 +282,14 @@ int main(void) {
                 uint64_t span = (uint64_t)(now - previous_ms);
                 uint64_t rate = span ? (client.rx_total - previous_rx) * 1000u / span : 0;
                 board_log("Sendspin chunks=%u written=%u dropped=%u underruns=%u sync=%d "
-                          "lat_ms=%lld level=%u flags=%u rx=%llu B/s vol=%d mute=%d fault=%d\n",
+                          "lat_ms=%lld level=%u flags=%u rx=%llu B/s vol=%d mute=%d ppm=%d "
+                          "fault=%d\n",
                           (unsigned)atomic_get(&chunks), player.frames_written,
                           player.frames_dropped, eaf_board_output_underruns(),
                           (int)player.synchronized, (long long)(player.last_latency_us / 1000),
                           eaf_board_output_level(), eaf_board_output_flags(),
                           (unsigned long long)rate, volume_level, (int)volume_muted,
-                          (int)tas5805m_fault());
+                          (int)player.rate_ppm, (int)tas5805m_fault());
                 wifi_health();
                 previous_rx = client.rx_total;
                 previous_ms = now;

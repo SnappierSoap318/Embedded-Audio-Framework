@@ -13,6 +13,14 @@ uint64_t __wrap_hal_monotonic_time_us(void) {
     return now;
 }
 
+static uint32_t counted;
+static uint32_t count_sink(void *ctx, const int32_t *samples, uint32_t frames) {
+    (void)ctx;
+    (void)samples;
+    counted += frames;
+    return frames;
+}
+
 static uint32_t record(void *ctx, const int32_t *samples, uint32_t frames) {
     (void)ctx;
     if (frames > sink_limit)
@@ -133,6 +141,27 @@ int main(void) {
     CHECK(!eaf_sendspin_player_write(&player, future, pcm32, sizeof(pcm32)));
     CHECK(player.frames_written == 1 && recorded_frames == 1);
     CHECK(recorded[0] == 0x40000000 && recorded[1] == (int32_t)0xC0000000u);
+    eaf_sendspin_player_finish(&player);
+
+    /* Rate control resamples into the sink to hold the target latency. With a
+       persistent 200 ms measurement against a 100 ms target the correction is
+       negative, so fewer output frames are written than source frames. */
+    counted = 0;
+    eaf_sendspin_player_init(&player, count_sink, NULL);
+    eaf_sendspin_player_set_rate_control(&player, 100.0);
+    CHECK(!eaf_sendspin_player_begin(&player, &filter, &start));
+    CHECK(player.rate_control);
+    uint8_t block[128u * 4u];
+    memset(block, 0, sizeof(block));
+    uint32_t source_frames = 0;
+    for (unsigned i = 0; i < 20; ++i) {
+        now += 200000u;
+        int64_t late = eaf_sendspin_compute_server_time(&filter, (int64_t)now + 200000);
+        CHECK(!eaf_sendspin_player_write(&player, late, block, sizeof(block)));
+        source_frames += 128u;
+    }
+    CHECK(player.rate_ppm < 0);
+    CHECK(counted == player.frames_written && player.frames_written < source_frames);
     eaf_sendspin_player_finish(&player);
 
     /* Unsupported format and invalid arguments. */

@@ -15,10 +15,10 @@ typedef struct {
 
 void eaf_sync_controller_init(eaf_sync_controller_t *c, double kp, double ki, double limit_ppm);
 void eaf_sync_controller_reset(eaf_sync_controller_t *c);
-/* error_ms = measured presentation latency - target (positive means output is
-   late or the buffer is too full, so the clock must run faster). dt_s is the
-   time since the previous call in seconds. Returns the bounded correction in
-   ppm, where positive means "consume the source faster". */
+/* error_ms is the target minus the measured value, so a positive error means
+   the controlled quantity must increase; dt_s is the time since the previous
+   call in seconds. Returns the bounded correction in ppm. The caller decides
+   what the sign means (for playback, positive increases the output rate). */
 double eaf_sync_controller_update(eaf_sync_controller_t *c, double error_ms, double dt_s);
 
 /* Output/input frame ratio for a ppm correction: 1 + ppm*1e-6. */

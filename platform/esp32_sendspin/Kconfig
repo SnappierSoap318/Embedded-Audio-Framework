@@ -80,6 +80,14 @@ config EAF_AMP_FAULT_GPIO
     int "TAS5805M FAULT GPIO (input)"
     default 34
     range 0 39
+config EAF_BOARD_RATE_CONTROL
+    bool "Hold presentation latency with drift resampling"
+    default y
+    help
+      Resample the PCM written to the sink to hold the measured Sendspin
+      presentation latency at the reported lead time. Required for synchronized
+      multiroom playback; the correction is bounded to a few hundred ppm.
+
 config EAF_BOARD_WIFI_PS_NONE
     bool "Disable Wi-Fi modem sleep for lower latency"
     default y
