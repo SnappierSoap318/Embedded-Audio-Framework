@@ -336,6 +336,12 @@ static eaf_sendspin_codec_t codec_from_value(const eaf_sendspin_json_value_t *va
         return EAF_SENDPIN_CODEC_PCM;
     if (eaf_sendspin_json_string_equals(value, "flac"))
         return EAF_SENDPIN_CODEC_FLAC;
+    if (eaf_sendspin_json_string_equals(value, "opus"))
+        return EAF_SENDPIN_CODEC_OPUS;
+    if (eaf_sendspin_json_string_equals(value, "mp3"))
+        return EAF_SENDPIN_CODEC_MP3;
+    if (eaf_sendspin_json_string_equals(value, "vorbis"))
+        return EAF_SENDPIN_CODEC_VORBIS;
     return EAF_SENDPIN_CODEC_UNKNOWN;
 }
 
@@ -558,8 +564,37 @@ static void wr_json_string(writer_t *w, const char *data, size_t length) {
     wr_char(w, '"');
 }
 
+/* Returns NULL for codecs that must not be advertised. */
 static const char *codec_name(eaf_sendspin_codec_t codec) {
-    return codec == EAF_SENDPIN_CODEC_FLAC ? "flac" : "pcm";
+    switch (codec) {
+    case EAF_SENDPIN_CODEC_PCM:
+        return "pcm";
+    case EAF_SENDPIN_CODEC_FLAC:
+        return "flac";
+    case EAF_SENDPIN_CODEC_OPUS:
+        return "opus";
+    case EAF_SENDPIN_CODEC_MP3:
+        return "mp3";
+    case EAF_SENDPIN_CODEC_VORBIS:
+        return "vorbis";
+    default:
+        return NULL;
+    }
+}
+
+static void write_format(writer_t *w, const char *name, const eaf_sendspin_format_t *format) {
+    wr_lit(w, "{\"codec\":");
+    wr_json_string(w, name, strlen(name));
+    wr_lit(w, ",\"channels\":");
+    wr_u64(w, format->channels);
+    wr_lit(w, ",\"sample_rate\":");
+    wr_u64(w, format->sample_rate);
+    /* Precision is a PCM property; compressed formats carry it in-band. */
+    if (format->codec == EAF_SENDPIN_CODEC_PCM && format->bit_depth != 0u) {
+        wr_lit(w, ",\"bit_depth\":");
+        wr_u64(w, format->bit_depth);
+    }
+    wr_lit(w, "}");
 }
 
 static int finish(writer_t *w, size_t *written) {
@@ -598,15 +633,24 @@ int eaf_sendspin_build_client_hello(char *dst, size_t capacity,
         }
         wr_lit(&w, "}");
     }
-    wr_lit(&w, ",\"player@v1_support\":{\"supported_formats\":[{\"codec\":");
-    wr_json_string(&w, codec_name(EAF_SENDPIN_CODEC_PCM), 3);
-    wr_lit(&w, ",\"channels\":");
-    wr_u64(&w, hello->channels);
-    wr_lit(&w, ",\"sample_rate\":");
-    wr_u64(&w, hello->sample_rate);
-    wr_lit(&w, ",\"bit_depth\":");
-    wr_u64(&w, hello->bit_depth);
-    wr_lit(&w, "}],\"buffer_capacity\":");
+    wr_lit(&w, ",\"player@v1_support\":{\"supported_formats\":[");
+    size_t emitted = 0;
+    for (size_t i = 0; hello->formats && i < hello->format_count; ++i) {
+        const char *name = codec_name(hello->formats[i].codec);
+        if (!name)
+            continue;
+        if (emitted++)
+            wr_char(&w, ',');
+        write_format(&w, name, &hello->formats[i]);
+    }
+    if (emitted == 0u) {
+        const eaf_sendspin_format_t fallback = {.codec = EAF_SENDPIN_CODEC_PCM,
+                                                .sample_rate = hello->sample_rate,
+                                                .channels = hello->channels,
+                                                .bit_depth = hello->bit_depth};
+        write_format(&w, "pcm", &fallback);
+    }
+    wr_lit(&w, "],\"buffer_capacity\":");
     wr_u64(&w, hello->buffer_capacity);
     wr_lit(&w, ",\"supported_commands\":[");
     if (hello->support_volume) {

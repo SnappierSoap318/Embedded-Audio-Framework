@@ -24,6 +24,11 @@ typedef struct {
     const char *product_name;
     const char *manufacturer;
     const char *software_version;
+    /* Codecs this build can decode, in preference order; only these are
+       advertised. When NULL/0 the client advertises PCM from the scalar
+       sample_rate/channels/bit_depth. */
+    const eaf_sendspin_format_t *formats;
+    size_t format_count;
     uint32_t sample_rate;
     uint8_t channels;
     uint8_t bit_depth;

@@ -86,6 +86,61 @@ static void parse_messages(void) {
     CHECK(command.command == EAF_SENDPIN_COMMAND_MUTE && command.muted && command.volume == -1);
 }
 
+static void codec_negotiation(void) {
+    static const char opus_start[] =
+        "{\"payload\":{\"server_transmitted\":1,\"player\":{\"codec\":\"opus\","
+        "\"sample_rate\":48000,\"channels\":2,\"bit_depth\":16}},"
+        "\"type\":\"stream/start\"}";
+    static const char vorbis_start[] =
+        "{\"payload\":{\"server_transmitted\":1,\"player\":{\"codec\":\"vorbis\","
+        "\"sample_rate\":44100,\"channels\":2,\"bit_depth\":24,"
+        "\"codec_header\":\"T2dnUw==\"}},\"type\":\"stream/start\"}";
+    static const char mp3_start[] =
+        "{\"payload\":{\"server_transmitted\":1,\"player\":{\"codec\":\"mp3\","
+        "\"sample_rate\":44100,\"channels\":1,\"bit_depth\":16}},"
+        "\"type\":\"stream/start\"}";
+    eaf_sendspin_stream_start_t start;
+    CHECK(!eaf_sendspin_parse_stream_start(opus_start, strlen(opus_start), &start));
+    CHECK(start.codec == EAF_SENDPIN_CODEC_OPUS && start.sample_rate == 48000);
+    CHECK(!eaf_sendspin_parse_stream_start(mp3_start, strlen(mp3_start), &start));
+    CHECK(start.codec == EAF_SENDPIN_CODEC_MP3 && start.channels == 1);
+    CHECK(!eaf_sendspin_parse_stream_start(vorbis_start, strlen(vorbis_start), &start));
+    CHECK(start.codec == EAF_SENDPIN_CODEC_VORBIS);
+    CHECK(start.codec_header_length == strlen("T2dnUw==") &&
+          !memcmp(start.codec_header, "T2dnUw==", 8));
+
+    /* An unadvertised codec parses as UNKNOWN, never as PCM. */
+    static const char aac_start[] =
+        "{\"payload\":{\"player\":{\"codec\":\"aac\",\"sample_rate\":44100,\"channels\":2,"
+        "\"bit_depth\":16},\"server_transmitted\":1},\"type\":\"stream/start\"}";
+    CHECK(!eaf_sendspin_parse_stream_start(aac_start, strlen(aac_start), &start));
+    CHECK(start.codec == EAF_SENDPIN_CODEC_UNKNOWN);
+
+    /* Advertised list preserves preference order, omits PCM-only bit_depth for
+       compressed codecs and drops UNKNOWN entries. */
+    static const eaf_sendspin_format_t formats[] = {
+        {EAF_SENDPIN_CODEC_FLAC, 44100, 2, 0},
+        {EAF_SENDPIN_CODEC_UNKNOWN, 0, 0, 0},
+        {EAF_SENDPIN_CODEC_OPUS, 48000, 2, 0},
+        {EAF_SENDPIN_CODEC_PCM, 44100, 2, 16},
+    };
+    char buffer[512];
+    size_t written = 0;
+    eaf_sendspin_client_hello_t hello = {.client_id = "id",
+                                         .name = "n",
+                                         .formats = formats,
+                                         .format_count = 4,
+                                         .buffer_capacity = 1};
+    CHECK(!eaf_sendspin_build_client_hello(buffer, sizeof(buffer), &hello, &written));
+    buffer[written] = '\0';
+    static const char expected[] =
+        "\"supported_formats\":[{\"codec\":\"flac\",\"channels\":2,\"sample_rate\":44100},"
+        "{\"codec\":\"opus\",\"channels\":2,\"sample_rate\":48000},"
+        "{\"codec\":\"pcm\",\"channels\":2,\"sample_rate\":44100,\"bit_depth\":16}]";
+    CHECK(strstr(buffer, expected) != NULL);
+    CHECK(strstr(buffer, "\"codec\":\"") != NULL && strstr(buffer, "aac") == NULL);
+}
+
 static void json_reader(void) {
     const char *json = "{\"type\":\"stream/start\",\"payload\":{\"player\":{\"codec\":\"flac\","
                        "\"bit_depth\":24},\"roles\":[\"player\",\"artwork\"],\"n\":-12}}";
@@ -163,6 +218,7 @@ static void build_messages(void) {
 
 int main(void) {
     parse_messages();
+    codec_negotiation();
     json_reader();
     build_messages();
     puts("sendspin protocol PASS");

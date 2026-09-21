@@ -13,6 +13,7 @@ static unsigned ready_count, start_count, audio_count, end_count, clear_count, c
 static int64_t audio_timestamp;
 static uint8_t audio_bytes[64];
 static size_t audio_length;
+static eaf_sendspin_codec_t expected_codec = EAF_SENDPIN_CODEC_FLAC;
 
 static const char http_response[] = "HTTP/1.1 101 Switching Protocols\r\n"
                                     "Upgrade: websocket\r\nConnection: upgrade\r\n\r\n";
@@ -80,13 +81,13 @@ static void on_ready(void *ctx, const eaf_sendspin_server_hello_t *hello) {
 }
 static void on_start(void *ctx, const eaf_sendspin_stream_start_t *start) {
     (void)ctx;
-    CHECK(start->codec == EAF_SENDPIN_CODEC_PCM && start->sample_rate == 44100);
+    CHECK(start->codec == expected_codec && start->sample_rate == 44100);
     ++start_count;
 }
 static void on_audio(void *ctx, const eaf_sendspin_stream_start_t *format, int64_t timestamp,
                      const uint8_t *pcm, size_t length) {
     (void)ctx;
-    CHECK(format->codec == EAF_SENDPIN_CODEC_PCM);
+    CHECK(format->codec == expected_codec);
     audio_timestamp = timestamp;
     audio_length = length;
     CHECK(length <= sizeof(audio_bytes));
@@ -145,8 +146,9 @@ static void script_server(void) {
         "{\"payload\":{\"client_transmitted\":1005000,\"server_received\":1005200,"
         "\"server_transmitted\":1005300},\"type\":\"server/time\"}";
     static const char start[] =
-        "{\"payload\":{\"server_transmitted\":1000600,\"player\":{\"codec\":\"pcm\","
-        "\"sample_rate\":44100,\"channels\":2,\"bit_depth\":16}},\"type\":\"stream/start\"}";
+        "{\"payload\":{\"server_transmitted\":1000600,\"player\":{\"codec\":\"flac\","
+        "\"sample_rate\":44100,\"channels\":2,\"bit_depth\":16,"
+        "\"codec_header\":\"ZkxhQw==\"}},\"type\":\"stream/start\"}";
     static const char command[] = "{\"payload\":{\"player\":{\"command\":\"volume\",\"volume\":7}},"
                                   "\"type\":\"server/command\"}";
     static const char clear[] = "{\"payload\":{\"roles\":[\"player\"]},\"type\":\"stream/clear\"}";
@@ -170,6 +172,21 @@ static void script_server(void) {
     offset = append_frame(offset, EAF_SENDPIN_WS_BINARY, audio, sizeof(audio));
     offset = append_frame(offset, EAF_SENDPIN_WS_TEXT, (const uint8_t *)clear, sizeof(clear) - 1u);
     offset = append_frame(offset, EAF_SENDPIN_WS_TEXT, (const uint8_t *)end, sizeof(end) - 1u);
+    server_size = offset;
+}
+
+/* A server that selects a codec the client never advertised. */
+static void script_reject_start(void) {
+    static const char hello[] =
+        "{\"payload\":{\"server_id\":\"abc\",\"name\":\"MA\",\"version\":1,"
+        "\"connection_reason\":\"discovery\",\"active_roles\":[\"player@v1\"]},"
+        "\"type\":\"server/hello\"}";
+    static const char start[] =
+        "{\"payload\":{\"server_transmitted\":1000600,\"player\":{\"codec\":\"opus\","
+        "\"sample_rate\":48000,\"channels\":2,\"bit_depth\":16}},\"type\":\"stream/start\"}";
+    size_t offset = 0;
+    offset = append_frame(offset, EAF_SENDPIN_WS_TEXT, (const uint8_t *)hello, sizeof(hello) - 1u);
+    offset = append_frame(offset, EAF_SENDPIN_WS_TEXT, (const uint8_t *)start, sizeof(start) - 1u);
     server_size = offset;
 }
 
@@ -233,11 +250,15 @@ static bool decoded_contains(const char *needle) {
 
 int main(void) {
     script_server();
+    static const eaf_sendspin_format_t formats[] = {{EAF_SENDPIN_CODEC_FLAC, 44100, 2, 0},
+                                                    {EAF_SENDPIN_CODEC_PCM, 44100, 2, 16}};
     eaf_sendspin_config_t config = {.client_id = "eaf-test",
                                     .name = "EAF Test",
                                     .product_name = "EAF Test",
                                     .manufacturer = "EAF",
                                     .software_version = "test",
+                                    .formats = formats,
+                                    .format_count = 2,
                                     .sample_rate = 44100,
                                     .channels = 2,
                                     .bit_depth = 16,
@@ -271,6 +292,7 @@ int main(void) {
     CHECK(decoded_contains("\"type\":\"client/hello\""));
     CHECK(decoded_contains("\"type\":\"client/state\""));
     CHECK(decoded_contains("\"type\":\"client/time\""));
+    CHECK(decoded_contains("\"codec\":\"flac\""));
     CHECK(client.handshaken);
 
     /* Exhausting the scripted stream closes the client and reports once. */
@@ -279,6 +301,26 @@ int main(void) {
 
     /* A second step on a closed client is a state error. */
     CHECK(eaf_sendspin_client_step(&client) == EAF_STATE);
+
+    /* Negotiation guard: a codec the client never advertised is refused and the
+       connection is torn down instead of feeding an undecodable stream. */
+    server_size = server_offset = sent_size = http_offset = 0;
+    ready_count = start_count = audio_count = end_count = clear_count = command_count =
+        disconnect_count = 0;
+    script_reject_start();
+    static const eaf_sendspin_format_t pcm_only[] = {{EAF_SENDPIN_CODEC_PCM, 44100, 2, 16}};
+    eaf_sendspin_config_t pcm_config = config;
+    pcm_config.formats = pcm_only;
+    pcm_config.format_count = 1;
+    eaf_sendspin_client_init(&client, &pcm_config, &callbacks, NULL);
+    CHECK(!eaf_sendspin_client_connect(&client, 0x7F000001u, 8927, 1000));
+    CHECK(!eaf_sendspin_client_step(&client));
+    int reject_rc = EAF_OK;
+    for (unsigned i = 0; i < 200 && disconnect_count == 0; ++i)
+        reject_rc = eaf_sendspin_client_step(&client);
+    CHECK(reject_rc == EAF_IO);
+    CHECK(ready_count == 1 && start_count == 0 && disconnect_count == 1);
+    CHECK(client.state == EAF_SENDPIN_CLIENT_CLOSED);
     printf("sendspin client PASS (sent %zu bytes)\n", sent_size);
     return 0;
 }

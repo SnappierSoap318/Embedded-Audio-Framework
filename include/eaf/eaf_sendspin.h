@@ -77,8 +77,21 @@ int eaf_sendspin_json_string_equals(const eaf_sendspin_json_value_t *value, cons
 typedef enum {
     EAF_SENDPIN_CODEC_UNKNOWN = 0,
     EAF_SENDPIN_CODEC_PCM,
-    EAF_SENDPIN_CODEC_FLAC
+    EAF_SENDPIN_CODEC_FLAC,
+    EAF_SENDPIN_CODEC_OPUS,
+    EAF_SENDPIN_CODEC_MP3,
+    EAF_SENDPIN_CODEC_VORBIS
 } eaf_sendspin_codec_t;
+
+/* One entry of the client's advertised `supported_formats`. The array order is
+   the preference order offered to the server. `bit_depth` applies to PCM and is
+   ignored (and omitted) for compressed codecs. */
+typedef struct {
+    eaf_sendspin_codec_t codec;
+    uint32_t sample_rate;
+    uint8_t channels;
+    uint8_t bit_depth;
+} eaf_sendspin_format_t;
 
 typedef enum {
     EAF_SENDPIN_COMMAND_UNKNOWN = 0,
@@ -149,6 +162,11 @@ typedef struct {
     const char *product_name;
     const char *manufacturer;
     const char *software_version;
+    /* Advertised formats in preference order. When formats is NULL or
+       format_count is zero, a single PCM entry is built from the scalar
+       sample_rate/channels/bit_depth below (backwards-compatible default). */
+    const eaf_sendspin_format_t *formats;
+    size_t format_count;
     uint32_t sample_rate;
     uint8_t channels;
     uint8_t bit_depth;

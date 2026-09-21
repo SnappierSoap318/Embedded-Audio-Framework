@@ -136,6 +136,19 @@ static void send_time(eaf_sendspin_client_t *client) {
     client->next_time_us = now + (uint64_t)time_interval_ms(client) * 1000u;
 }
 
+/* A stream/start codec is admissible only if this client advertised it. With no
+   configured list the client advertises PCM alone. */
+static bool client_supports_codec(const eaf_sendspin_client_t *client, eaf_sendspin_codec_t codec) {
+    if (client->config.formats && client->config.format_count) {
+        for (size_t i = 0; i < client->config.format_count; ++i) {
+            if (client->config.formats[i].codec == codec)
+                return true;
+        }
+        return false;
+    }
+    return codec == EAF_SENDPIN_CODEC_PCM;
+}
+
 static int on_server_hello(eaf_sendspin_client_t *client, const char *json, size_t length) {
     eaf_sendspin_server_hello_t hello;
     if (eaf_sendspin_parse_server_hello(json, length, &hello))
@@ -177,7 +190,7 @@ static int dispatch_text(eaf_sendspin_client_t *client, const char *json, size_t
     if (eaf_sendspin_json_string_equals(&type, "stream/start")) {
         if (eaf_sendspin_parse_stream_start(json, length, &client->stream))
             return EAF_INVALID;
-        if (client->stream.codec != EAF_SENDPIN_CODEC_PCM)
+        if (!client_supports_codec(client, client->stream.codec))
             return EAF_UNSUPPORTED;
         client->stream_active = true;
         if (client->callbacks.stream_start)
@@ -314,6 +327,8 @@ int eaf_sendspin_client_step(eaf_sendspin_client_t *client) {
                                              .product_name = client->config.product_name,
                                              .manufacturer = client->config.manufacturer,
                                              .software_version = client->config.software_version,
+                                             .formats = client->config.formats,
+                                             .format_count = client->config.format_count,
                                              .sample_rate = client->config.sample_rate,
                                              .channels = client->config.channels,
                                              .bit_depth = client->config.bit_depth,
