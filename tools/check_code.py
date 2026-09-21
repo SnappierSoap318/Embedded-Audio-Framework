@@ -13,8 +13,12 @@ import sys
 root = Path(__file__).resolve().parent.parent
 build = (root / (sys.argv[1] if len(sys.argv) > 1 else 'build-lint')).resolve()
 owned = [root / name for name in ('apps', 'core', 'hal', 'include', 'platform', 'tests')]
+# Generated build trees can live inside an owned directory (e.g. an IDF project's
+# platform/esp_idf_sendspin/build); never format-check their output.
+ignored_parts = {'build', 'build-idf', '.git'}
 formats = sorted(str(p) for directory in owned for p in directory.rglob('*')
-                 if p.suffix in ('.c', '.h', '.inc'))
+                 if p.suffix in ('.c', '.h', '.inc')
+                 and not ignored_parts.intersection(p.parts))
 subprocess.run(['clang-format', '--dry-run', '--Werror', *formats], check=True)
 entries = json.loads((build / 'compile_commands.json').read_text())
 # Zephyr's GCC host flags have no Clang equivalent; preserve defines/includes.

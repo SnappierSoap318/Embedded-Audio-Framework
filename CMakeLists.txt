@@ -200,7 +200,9 @@ if(BUILD_TESTING)
     add_executable(test_sendspin_player tests/test_sendspin_player.c)
     target_link_libraries(test_sendspin_player PRIVATE eaf)
     target_link_options(test_sendspin_player PRIVATE -Wl,--wrap=hal_monotonic_time_us)
-    add_test(NAME sendspin_player COMMAND test_sendspin_player)
+    add_test(NAME sendspin_player
+      COMMAND test_sendspin_player ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.flac
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/tone.ogg)
     set_tests_properties(sendspin_player PROPERTIES TIMEOUT 30)
   endif()
   target_link_options(test_hal_os PRIVATE -Wl,--wrap=sem_clockwait -Wl,--wrap=pthread_create)

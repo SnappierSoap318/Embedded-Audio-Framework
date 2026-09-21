@@ -226,10 +226,11 @@ sole PCM producer, one bounded buffer, partial sink writes retained. Decoders
 must not allocate or block on the audio path (`open`/`close` only), and output
 interleaved Q1.31.
 
-- [ ] **C1 — Codec negotiation.** Advertise only compiled-in codecs with a
-  configurable preference order and carry the `codec_header`/extradata into the
-  decoder. Currently the Sendspin client advertises and accepts PCM only
-  (`apps/sendspin/sendspin_protocol.c`, `sendspin_client.c`, `sendspin_player.c`).
+- [x] **C1 — Codec negotiation.** Done: `client/hello` advertises a
+  configurable `supported_formats` preference list (unknown codecs are dropped),
+  `server/start` codecs parse for PCM/FLAC/Opus/MP3/Vorbis, and a stream is
+  admitted only if the client advertised its codec. `codec_header` is carried
+  into the decoder by C7.
 - [ ] **C2 — Decoder interface and worker.** Done: `eaf_decoder` + `eaf_decode_worker`
   with host tests (`tests/test_decoder.c`), backpressure retention, format checks
   and reset-on-error.
@@ -252,8 +253,15 @@ interleaved Q1.31.
   (`apps/decoders/dec_vorbis.c`), host test on `tests/fixtures/tone.ogg`. A
   decoded Vorbis frame is emitted whole, so the owner must supply a buffer at
   least as large as the stream's maximum frame.
-- [ ] **C7 — Sendspin integration.** Route compressed frames through the decode
-  worker and keep rate control/resampling after decode; advertise only built codecs.
+- [ ] **C7 — Sendspin integration.** In progress: the player binds a caller-owned
+  decoder adapter (`eaf_sendspin_player_set_decoder`) and runs one
+  `eaf_decode_worker` per compressed stream, printing decoded frames through the
+  same rate-adjusted sink as PCM. Host tests decode FLAC sample-exact and Vorbis
+  incrementally (`tests/test_sendspin_player.c`). Open: dr_flac/dr_mp3 latch EOF
+  on a short read, so a live incremental FLAC/MP3 stream needs an `await` hook
+  serviced by a decode thread (inline decode currently stages the whole stream);
+  packet/`pushdata` codecs (Opus/Vorbis) already stream. The board app still
+  advertises/selects adapters only as far as the Zephyr profile wires them.
 - [ ] **C8 — Tests and licensing.** Host fixtures (flac/opus/vorbis available),
   corruption/truncation guards, stack/heap/CPU measurements; keep `third_party/`
   and `docs/licensing.md` current.

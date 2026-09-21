@@ -1,13 +1,17 @@
 #include "check.h"
+#include <eaf/eaf_dec_flac.h>
+#include <eaf/eaf_dec_vorbis.h>
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_sendspin_player.h>
+#include <stdio.h>
 #include <string.h>
 
 static eaf_sendspin_player_t player;
-static int32_t recorded[512u * 2u];
+static int32_t recorded[8192u * 2u];
 static uint32_t recorded_frames;
 static uint32_t sink_limit = UINT32_MAX;
 static uint64_t now;
+static eaf_sendspin_time_filter_t filter;
 
 uint64_t __wrap_hal_monotonic_time_us(void) {
     return now;
@@ -59,8 +63,99 @@ static eaf_sendspin_stream_start_t make_start(uint8_t channels) {
                                          .bit_depth = 16};
 }
 
-int main(void) {
-    eaf_sendspin_time_filter_t filter;
+/* A FLAC stream is framed by the server and decoded through the injected
+   adapter; the fixture is a 4096-frame 16-bit ramp, so the expected Q1.31 output
+   is exact. */
+static void compressed_stream_test(const char *path) {
+    FILE *file = fopen(path, "rb");
+    CHECK(file != NULL);
+    static uint8_t flac[65536];
+    size_t length = fread(flac, 1, sizeof(flac), file);
+    fclose(file);
+    CHECK(length > 0);
+
+    static eaf_dec_flac_t flac_state;
+    static int32_t flac_scratch[1024u * 2u];
+    eaf_dec_flac_configure(&flac_state, NULL, NULL);
+    eaf_sendspin_decoder_t decoder = {.ops = &eaf_dec_flac_ops,
+                                      .ctx = &flac_state,
+                                      .scratch = flac_scratch,
+                                      .scratch_frames = 1024u};
+
+    recorded_frames = 0;
+    eaf_sendspin_player_init(&player, record, NULL);
+    eaf_sendspin_player_set_decoder(&player, &decoder);
+    eaf_sendspin_stream_start_t start = {
+        .codec = EAF_SENDPIN_CODEC_FLAC, .sample_rate = 44100, .channels = 2, .bit_depth = 16};
+    CHECK(!eaf_sendspin_player_begin(&player, &filter, &start));
+    CHECK(player.compressed);
+
+    int64_t future = eaf_sendspin_compute_server_time(&filter, (int64_t)now + 1000000);
+    /* dr_flac latches EOF on a short read, so the whole stream is staged before
+       draining (a live platform instead supplies an await hook on a decode
+       thread; see TASKS C7). */
+    CHECK(!eaf_sendspin_player_write(&player, future, flac, length));
+    CHECK(player.frames_written == 4096u && player.frames_dropped == 0u);
+    CHECK(recorded_frames == 4096u);
+    for (uint32_t i = 0; i < 4096u; ++i) {
+        CHECK(recorded[(size_t)i * 2u] == eaf_pcm16_to_q31((int16_t)(i * 101)));
+        CHECK(recorded[(size_t)i * 2u + 1u] == eaf_pcm16_to_q31((int16_t)(-i * 101)));
+    }
+    eaf_sendspin_player_finish(&player);
+    CHECK(!player.active && !player.compressed);
+
+    /* A compressed stream with no bound decoder is refused rather than begun. */
+    eaf_sendspin_player_init(&player, record, NULL);
+    CHECK(eaf_sendspin_player_begin(&player, &filter, &start) == EAF_UNSUPPORTED);
+    CHECK(!player.active);
+}
+
+/* Vorbis arrives across many writes, so this exercises incremental feeding: the
+   decoder must make progress as bytes land, not only once the stream ends. */
+static void incremental_stream_test(const char *path) {
+    FILE *file = fopen(path, "rb");
+    CHECK(file != NULL);
+    static uint8_t ogg[65536];
+    size_t length = fread(ogg, 1, sizeof(ogg), file);
+    fclose(file);
+    CHECK(length > 0);
+
+    static eaf_dec_vorbis_t vorbis_state;
+    static int32_t vorbis_scratch[4096u * 2u];
+    eaf_sendspin_decoder_t decoder = {.ops = &eaf_dec_vorbis_ops,
+                                      .ctx = &vorbis_state,
+                                      .scratch = vorbis_scratch,
+                                      .scratch_frames = 4096u};
+
+    recorded_frames = 0;
+    eaf_sendspin_player_init(&player, record, NULL);
+    eaf_sendspin_player_set_decoder(&player, &decoder);
+    eaf_sendspin_stream_start_t start = {
+        .codec = EAF_SENDPIN_CODEC_VORBIS, .sample_rate = 44100, .channels = 2, .bit_depth = 16};
+    CHECK(!eaf_sendspin_player_begin(&player, &filter, &start));
+    CHECK(player.compressed);
+
+    int64_t future = eaf_sendspin_compute_server_time(&filter, (int64_t)now + 1000000);
+    for (size_t offset = 0; offset < length; offset += 128u) {
+        size_t chunk = length - offset;
+        if (chunk > 128u)
+            chunk = 128u;
+        CHECK(!eaf_sendspin_player_write(&player, future, ogg + offset, chunk));
+    }
+    /* Lossy and delay-padded, but the tone's frames must all reach the sink. */
+    CHECK(player.frames_written > 3000u && player.frames_written < 5000u);
+    CHECK(player.frames_dropped == 0u && recorded_frames == player.frames_written);
+    double energy = 0.0;
+    for (uint32_t i = 0; i < recorded_frames; ++i) {
+        double sample = (double)(recorded[(size_t)i * 2u] >> 16);
+        energy += sample * sample;
+    }
+    CHECK(energy > 0.0);
+    eaf_sendspin_player_finish(&player);
+}
+
+int main(int argc, char **argv) {
+    CHECK(argc >= 3);
     eaf_sendspin_time_filter_init(&filter);
     eaf_sendspin_time_filter_update(&filter, 0, 100, 1000000u);
     eaf_sendspin_time_filter_update(&filter, 0, 100, 2000000u);
@@ -163,6 +258,9 @@ int main(void) {
     CHECK(player.rate_ppm < 0);
     CHECK(counted == player.frames_written && player.frames_written < source_frames);
     eaf_sendspin_player_finish(&player);
+
+    compressed_stream_test(argv[1]);
+    incremental_stream_test(argv[2]);
 
     /* Unsupported format and invalid arguments. */
     eaf_sendspin_stream_start_t bad = make_start(2);
