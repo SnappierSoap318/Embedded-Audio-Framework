@@ -43,10 +43,27 @@ config EAF_SOURCE_CHANNELS
       rate drops when set to 1, which is more reliable on throughput-limited
       2.4 GHz Wi-Fi.
 
-config EAF_BYTES_PER_FRAME
-    int "Source bytes per frame (channels * sample size)"
-    default 2 if EAF_SOURCE_CHANNELS = 1
-    default 4
+choice EAF_BIT_DEPTH_CHOICE
+    prompt "Source PCM bit depth advertised to the server"
+    default EAF_BIT_DEPTH_16
+    help
+      Precision of the PCM the server sends. The board always presents 32-bit
+      Q1.31 to the I2S sink; the network rate grows with the chosen precision.
+
+config EAF_BIT_DEPTH_16
+    bool "16-bit"
+config EAF_BIT_DEPTH_24
+    bool "24-bit"
+config EAF_BIT_DEPTH_32
+    bool "32-bit"
+endchoice
+
+config EAF_BIT_DEPTH
+    int
+    default 16 if EAF_BIT_DEPTH_16
+    default 24 if EAF_BIT_DEPTH_24
+    default 32 if EAF_BIT_DEPTH_32
+
 config EAF_SAMPLE_RATE
     int "Source sample rate advertised to the server"
     default 44100

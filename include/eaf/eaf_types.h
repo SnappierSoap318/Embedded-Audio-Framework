@@ -48,3 +48,7 @@ static inline int32_t eaf_pcm24_to_q31(int32_t x) {
         return INT32_MIN;
     return x * 256;
 }
+/* 32-bit PCM shares the Q1.31 range, so no scaling is required. */
+static inline int32_t eaf_pcm32_to_q31(int32_t x) {
+    return x;
+}

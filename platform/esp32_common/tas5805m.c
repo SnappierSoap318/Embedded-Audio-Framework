@@ -91,6 +91,8 @@ int tas5805m_bringup(void) {
     /* Basic play configuration (BD modulation, 0 dB, HiZ -> Play). */
     select_book_page(0x00u, 0x00u);
     (void)reg_write_u8(0x02u, 0x00u); /* DAMP_MOD: BD modulation */
+    /* SAP_CTRL1 (P0-R51): standard I2S, 32-bit word to match the I2S slots. */
+    (void)reg_write_u8(0x33u, 0x03u);
     (void)reg_write_u8(0x53u, 0x60u); /* Class-D loop bandwidth 175 kHz */
     (void)reg_write_u8(0x61u, 0x0Bu); /* ADR/FAULT pin as FAULT */
     select_book_page(0x8Cu, 0x2Au);   /* DSP host memory volume page */

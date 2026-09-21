@@ -29,6 +29,21 @@ static void put_le16(uint8_t *dst, int16_t value) {
     dst[1] = (uint8_t)(raw >> 8);
 }
 
+static void put_le24(uint8_t *dst, int32_t value) {
+    uint32_t raw = (uint32_t)value & 0xFFFFFFu;
+    dst[0] = (uint8_t)raw;
+    dst[1] = (uint8_t)(raw >> 8);
+    dst[2] = (uint8_t)(raw >> 16);
+}
+
+static void put_le32(uint8_t *dst, int32_t value) {
+    uint32_t raw = (uint32_t)value;
+    dst[0] = (uint8_t)raw;
+    dst[1] = (uint8_t)(raw >> 8);
+    dst[2] = (uint8_t)(raw >> 16);
+    dst[3] = (uint8_t)(raw >> 24);
+}
+
 static eaf_sendspin_stream_start_t make_start(uint8_t channels) {
     return (eaf_sendspin_stream_start_t){.codec = EAF_SENDPIN_CODEC_PCM,
                                          .sample_rate = 44100,
@@ -92,9 +107,37 @@ int main(void) {
     CHECK(recorded[0] == 3000 * 65536 && recorded[1] == 3000 * 65536);
     eaf_sendspin_player_finish(&player);
 
+    /* 24-bit PCM is sign-extended and scaled to Q1.31. */
+    recorded_frames = 0;
+    eaf_sendspin_player_init(&player, record, NULL);
+    eaf_sendspin_stream_start_t s24 = make_start(2);
+    s24.bit_depth = 24;
+    CHECK(!eaf_sendspin_player_begin(&player, &filter, &s24));
+    uint8_t pcm24[6];
+    put_le24(pcm24 + 0, 1000);
+    put_le24(pcm24 + 3, -1000);
+    CHECK(!eaf_sendspin_player_write(&player, future, pcm24, sizeof(pcm24)));
+    CHECK(player.frames_written == 1 && recorded_frames == 1);
+    CHECK(recorded[0] == 1000 * 256 && recorded[1] == -1000 * 256);
+    eaf_sendspin_player_finish(&player);
+
+    /* 32-bit PCM is already Q1.31. */
+    recorded_frames = 0;
+    eaf_sendspin_player_init(&player, record, NULL);
+    eaf_sendspin_stream_start_t s32 = make_start(2);
+    s32.bit_depth = 32;
+    CHECK(!eaf_sendspin_player_begin(&player, &filter, &s32));
+    uint8_t pcm32[8];
+    put_le32(pcm32 + 0, 0x40000000);
+    put_le32(pcm32 + 4, (int32_t)0xC0000000u);
+    CHECK(!eaf_sendspin_player_write(&player, future, pcm32, sizeof(pcm32)));
+    CHECK(player.frames_written == 1 && recorded_frames == 1);
+    CHECK(recorded[0] == 0x40000000 && recorded[1] == (int32_t)0xC0000000u);
+    eaf_sendspin_player_finish(&player);
+
     /* Unsupported format and invalid arguments. */
     eaf_sendspin_stream_start_t bad = make_start(2);
-    bad.bit_depth = 24;
+    bad.bit_depth = 20;
     CHECK(eaf_sendspin_player_begin(&player, &filter, &bad) == EAF_UNSUPPORTED);
     eaf_sendspin_player_t no_sink;
     eaf_sendspin_player_init(&no_sink, NULL, NULL);

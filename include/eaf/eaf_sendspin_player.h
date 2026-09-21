@@ -2,7 +2,7 @@
 #include <eaf/eaf_sendspin.h>
 #include <eaf/eaf_types.h>
 
-/* Portable Sendspin producer: converts interleaved PCM16 chunks to stereo
+/* Portable Sendspin producer: converts interleaved PCM16/24/32 chunks to stereo
    Q1.31, applies hard sync (drop late audio) using the shared time filter, and
    hands frames to a caller-provided sink (e.g. the board output owner). */
 
@@ -15,7 +15,7 @@ typedef struct {
     eaf_sendspin_sink_fn sink;
     void *sink_ctx;
     eaf_format_t format;
-    uint8_t input_channels;
+    uint8_t input_channels, input_bits;
     bool active, synchronized, drop_late;
     int64_t last_latency_us;
     uint32_t frames_written, frames_dropped, chunks;

@@ -219,7 +219,7 @@ int main(void) {
                                     .manufacturer = "EAF",
                                     .software_version = "phase2",
                                     .sample_rate = CONFIG_EAF_SAMPLE_RATE,
-                                    .bit_depth = 16,
+                                    .bit_depth = CONFIG_EAF_BIT_DEPTH,
                                     .support_volume = true,
                                     .support_mute = true,
                                     .volume = 100,
@@ -227,7 +227,8 @@ int main(void) {
                                     .required_lead_time_ms = (int32_t)capacity_ms,
                                     .min_buffer_ms = (int32_t)capacity_ms};
     config.channels = CONFIG_EAF_SOURCE_CHANNELS;
-    config.buffer_capacity = capacity * CONFIG_EAF_BYTES_PER_FRAME;
+    config.buffer_capacity =
+        capacity * CONFIG_EAF_SOURCE_CHANNELS * (uint32_t)(CONFIG_EAF_BIT_DEPTH / 8);
     eaf_sendspin_callbacks_t callbacks = {.ready = on_ready,
                                           .stream_start = on_stream_start,
                                           .audio = on_audio,

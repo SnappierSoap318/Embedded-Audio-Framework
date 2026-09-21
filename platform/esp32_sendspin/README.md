@@ -21,6 +21,9 @@ The server address and player identity are Kconfig options:
 | `CONFIG_EAF_BOARD_PORT` | `8927` | Sendspin WebSocket port |
 | `CONFIG_EAF_BOARD_NAME` | `EAF Sendspin` | Name shown in Music Assistant |
 | `CONFIG_EAF_BOARD_CLIENT_ID` | `eaf-sendspin` | Stable player identifier |
+| `CONFIG_EAF_SAMPLE_RATE` | `44100` | Source sample rate |
+| `CONFIG_EAF_SOURCE_CHANNELS` | `2` | Source channels (WROOM advertises mono) |
+| `CONFIG_EAF_BIT_DEPTH` | `16` | Source PCM precision (16, 24 or 32) |
 
 Provide local values in an untracked `local.conf` next to this README:
 
@@ -52,9 +55,11 @@ WROVER PSRAM profile add `-DEXTRA_CONF_FILE=psram.conf;local.conf` and
 65536-frame (~1.5 s) reservoir to the external heap; the WROOM profile keeps the
 4096-frame (~93 ms) reservoir in internal RAM.
 
-The WROOM board config advertises mono PCM (`CONFIG_EAF_SOURCE_CHANNELS=1`,
-`CONFIG_EAF_BYTES_PER_FRAME=2`) to halve the network bitrate; the PSRAM profile
-advertises stereo. The board always expands the source to stereo for the sink.
+The WROOM board config advertises mono PCM (`CONFIG_EAF_SOURCE_CHANNELS=1`) to
+halve the network bitrate; the PSRAM profile advertises stereo. The PCM bit
+depth is `CONFIG_EAF_BIT_DEPTH` (16, 24 or 32); the player decodes any of the
+three to Q1.31 and the TAS5805M is configured for 32-bit I2S words. The board
+always expands the source to stereo for the sink.
 
 ## Behaviour
 
