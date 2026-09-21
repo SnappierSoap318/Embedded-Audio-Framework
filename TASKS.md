@@ -164,17 +164,23 @@ encrypted revision is a separate, later target.
   real-time stereo intake overnight on the WROVER; drift correction and measured
   inter-device phase error remain.
 - [ ] **S05 — Phase 4 spec-current encryption/pairing.** Noise `KKpsk2` via
-  mbedTLS and pairing, gated on a future MA/spec revision.
+  mbedTLS and pairing, gated on a future MA/spec revision. Checked 2026-09-21:
+  Music Assistant stable is 2.10.4 with no protocol change, so it still uses the
+  captured cleartext revision. The official `Sendspin/sendspin-cpp`
+  (Apache-2.0) is ESP-IDF/host-only (IXWebSocket, `std::thread`) and is not a
+  drop-in for this Zephyr C11 framework. Keep the cleartext revision and revisit
+  when MA adopts the spec-current revision.
 - [ ] **S06 — Selectable audio formats.** Add user-selectable source sample rate
   and PCM precision, with persisted settings and safe renegotiation/restart.
   Start with stereo 44.1/48 kHz and PCM16/24/32; retain 44.1 kHz/16-bit as the
   qualified baseline. Implemented: `CONFIG_EAF_BIT_DEPTH` (16/24/32) advertises
   the precision, the producer decodes PCM16/24/32 into Q1.31 with host vectors,
-  and the TAS5805M is set to 32-bit I2S words (SAP_CTRL1). Remaining: verify
-  clocks, channel order and gain/headroom on hardware; display the negotiated
-  network format separately from the DSP/I2S precision; qualify 48 kHz/24-bit
-  and 48 kHz/32-bit with sustained throughput/buffer/timing measurements; then
-  evaluate 88.2/96 kHz. Validate sample boundaries, sign extension and format
+  and the TAS5805M is set to 32-bit I2S words (SAP_CTRL1). 48 kHz/24-bit stereo
+  is confirmed audible on the WROVER (2026-09-21, `rx≈288 kB/s`, zero
+  underruns). Remaining: verify clocks, channel order and gain/headroom on
+  hardware; display the negotiated network format separately from the DSP/I2S
+  precision; qualify 48 kHz/32-bit with sustained throughput/buffer/timing
+  measurements; then evaluate 88.2/96 kHz. Validate sample boundaries, sign extension and format
   rejection against independently specified vectors. TI specifies up to 96 kHz
   and 32-bit input for TAS5805M, not a 48 kHz ceiling; whole-board support
   remains a measured gate. Wider containers or upsampling must not be presented
@@ -216,10 +222,17 @@ encrypted revision is a separate, later target.
   equivalence. Implement dither only at a defined precision-reduction boundary.
 - [ ] **T19 — Clock/PTS model.** Separate source, system, device and presentation
   clocks; define timestamp wrap, pipeline latency and scheduled starts. Verify
-  no claim of sample accuracy based on decoded/accepted frames alone.
+  no claim of sample accuracy based on decoded/accepted frames alone. The
+  Sendspin time filter already maps server timestamps to the local clock and
+  reports per-chunk latency; scheduled starts remain unimplemented.
 - [ ] **T20 — Drift compensation and multi-room.** Bounded controller + ASRC and/or
   ESP32 APLL backend; ±100 ppm long simulations, clock-step and saturation tests,
-  then measure <1 ms cross-device phase error on physical outputs.
+  then measure <1 ms cross-device phase error on physical outputs. Portable
+  primitives are implemented in `core/eaf_sync.c` (bounded PI controller with
+  anti-windup, and a linear-interpolation resampler) with host tests in
+  `tests/test_sync.c`. Remaining: presentation scheduling, the actuator
+  integration into the output owner (variable reservoir pull + resample to the
+  fixed sink block), and two-device phase measurement.
 
 ## Later board and qualification — P1/P2
 

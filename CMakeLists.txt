@@ -31,7 +31,7 @@ if(EAF_THREAD_SANITIZE)
   add_link_options(-fsanitize=thread)
 endif()
 add_library(eaf STATIC core/eaf_types.c core/eaf_reservoir.c core/eaf_graph.c core/eaf_control.c
-  core/eaf_dsp.c hal/common/hal_atomic_c11.c hal/linux/hal_os_linux.c
+  core/eaf_dsp.c core/eaf_sync.c hal/common/hal_atomic_c11.c hal/linux/hal_os_linux.c
   hal/linux/hal_file_linux.c hal/common/sink_null.c hal/linux/hal_tcp_linux.c
   apps/decoders/dec_wav.c apps/player/eaf_player.c)
 target_include_directories(eaf PUBLIC include)
@@ -127,7 +127,8 @@ if(BUILD_TESTING)
     add_test(NAME transports COMMAND test_transports)
     set_tests_properties(transports PROPERTIES TIMEOUT 30)
   endif()
-  foreach(name hal_os arch_example sink_lifecycle reservoir dsp graph spsc wav control player)
+  foreach(name hal_os arch_example sink_lifecycle reservoir dsp graph spsc wav control player
+               sync)
     add_executable(test_${name} tests/test_${name}.c)
     target_link_libraries(test_${name} PRIVATE eaf)
     add_test(NAME ${name} COMMAND test_${name})
