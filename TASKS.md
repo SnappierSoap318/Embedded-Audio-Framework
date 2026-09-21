@@ -204,7 +204,12 @@ encrypted revision is a separate, later target.
   agreement. Accept only advertised supported formats; test actual LMS conversions.
 - [ ] **T14 — Additional codecs.** Add bounded worker adapters for FLAC first, then
   MP3/Opus according to scope. Pin/licence dependencies and measure stack/heap/CPU,
-  corruption behavior and track changes on both host and MCU.
+  corruption behavior and track changes on both host and MCU. Progress: the
+  `eaf_decoder` adapter contract and `eaf_decode_worker` (bounded, backpressure
+  retaining) are implemented in `core/eaf_decoder.c`; a PCM passthrough adapter
+  (`apps/decoders/dec_pcm.c`) unifies the current PCM path; dr_libs/stb_vorbis are
+  vendored under `third_party/`. FLAC/Opus/MP3/Vorbis adapters remain; see the
+  C-series below.
 - [ ] **T15 — Playback controls.** ReplayGain/headroom policy, click-free volume and
   mute, balance, seek/skip and consistent pause/resume/output power behavior. Test
   controls during startup, pause, EOF and source replacement.
@@ -212,6 +217,55 @@ encrypted revision is a separate, later target.
   against simulated peer plus ALSA capture, not only protocol callbacks. Compare
   stereo samples, gains, timing events and lifecycle snapshots. Keep optional live
   LMS tests opt-in and isolated to a dedicated player identity.
+
+## Codec pipeline and platform backends — P1
+
+Codec adapters implement the `eaf_decoder_ops_t` contract
+(`include/eaf/eaf_decoder.h`) and are driven by one `eaf_decode_worker_t`: the
+sole PCM producer, one bounded buffer, partial sink writes retained. Decoders
+must not allocate or block on the audio path (`open`/`close` only), and output
+interleaved Q1.31.
+
+- [ ] **C1 — Codec negotiation.** Advertise only compiled-in codecs with a
+  configurable preference order and carry the `codec_header`/extradata into the
+  decoder. Currently the Sendspin client advertises and accepts PCM only
+  (`apps/sendspin/sendspin_protocol.c`, `sendspin_client.c`, `sendspin_player.c`).
+- [ ] **C2 — Decoder interface and worker.** Done: `eaf_decoder` + `eaf_decode_worker`
+  with host tests (`tests/test_decoder.c`), backpressure retention, format checks
+  and reset-on-error.
+- [ ] **C3 — FLAC adapter.** dr_flac (`third_party/dr_libs`). dr_flac streams
+  through a read callback that must fill its full L2 buffer in one call or it
+  latches EOF (`dr_flac.h:2231`), so streaming needs a bounded input ring plus a
+  blocking/await hook on the decode thread (whole-stream buffering is acceptable
+  for host tests). Allocate decoder state at open with a static pool.
+- [ ] **C4 — Opus adapter.** libopus (submodule `third_party/opus`), fixed-point,
+  48 kHz, raw packets; `opus_decoder_create_custom` with a static allocator.
+  Measure ESP32-classic CPU before enabling in the board profile.
+- [ ] **C5 — MP3 adapter.** dr_mp3 (`third_party/dr_libs`), same callback ring as FLAC.
+- [ ] **C6 — Vorbis adapter.** stb_vorbis (`third_party/stb`), push/pull `pushdata` API.
+- [ ] **C7 — Sendspin integration.** Route compressed frames through the decode
+  worker and keep rate control/resampling after decode; advertise only built codecs.
+- [ ] **C8 — Tests and licensing.** Host fixtures (flac/opus/vorbis available),
+  corruption/truncation guards, stack/heap/CPU measurements; keep `third_party/`
+  and `docs/licensing.md` current.
+
+- [ ] **E1 — ESP-IDF HAL: OS primitives.** FreeRTOS pinned tasks with role-based
+  Kconfig priorities, binary semaphore, `esp_timer` clocks, sleep-until. Target
+  the latest ESP-IDF v6.x (v6.1 verified to support classic ESP32).
+- [ ] **E2 — ESP-IDF HAL: TCP.** lwIP BSD sockets + `TCP_NODELAY`, mirroring the
+  Linux adapter.
+- [ ] **E3 — ESP-IDF HAL: I2S sink.** `driver/i2s_std.h` TX channel (legacy
+  `driver/i2s.h` is removed in v6) with the same acquire/commit/start/stop and
+  APLL `adjust_ppm` contract as the Zephyr sink.
+- [ ] **E4 — ESP-IDF build.** `idf_component_register` + Kconfig with CMake
+  `if(CONFIG_...)` source selection (preserving the no-`#if CONFIG` rule); add an
+  `esp32_smoke` target and CI job.
+- [ ] **E5 — Shared board code.** Refactor `platform/esp32_common` into
+  OS-agnostic and Zephyr/ESP-IDF parts; add `platform/esp_idf_sendspin`.
+- [ ] **E6 — Docs.** ESP-IDF v6.1 build/selection in `docs/development.md`, plus
+  `third_party` submodule/vendoring notes.
+- [ ] **E7 — ESPHome component path (later).** Because ESPHome is ESP-IDF, E1–E5
+  enable exposing EAF (DSP/sync) as an ESPHome external component.
 
 ## DSP and synchronization — P1/P2
 
@@ -254,7 +308,10 @@ encrypted revision is a separate, later target.
 - [ ] **T23 — TAS5805M integration.** Obtain carrier schematic, power/PDN/I2C address
   and clock requirements. Add HAL control driver and board initialization sequence,
   mute/ramp/fault handling, register profile and reset/recovery tests. Verify I2S
-  clock availability during configuration before enabling the amplifier.
+  clock availability during configuration before enabling the amplifier. The board
+  is a Louder-ESP32 derivative; for the ESPHome path the existing permissively
+  licensed `mrtoy-me/esphome-tas58xx` `audio_dac` component already supports
+  TAS5805M (upstream candidate rather than a bespoke driver).
 - [ ] **T24 — Release qualification/CI.** CI for formatting/static checks, ASan/UBSan,
   TSan concurrency tests, feature-off/on builds, pinned Zephyr smoke/board compile,
   fuzz/property tests, 24-hour stress and archived GPIO/DMA timing results. Track

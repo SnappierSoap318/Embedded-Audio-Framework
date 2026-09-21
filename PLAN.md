@@ -45,12 +45,18 @@ The existing Q1.31 DSP and 32-bit I2S slots do not imply 32-bit source precision
 4. **Clock synchronization:** define PTS and clock domains, presentation scheduling,
    bounded PI control, ASRC/hardware-PLL backends and +/-100 ppm tests. Required
    before claiming LMS multi-room accuracy.
-5. **Supporting playback:** native WAV source/player, EOF/seek/gain queue and
-   host tests already work. FLAC 1.5.0, mpg123 1.32.10 and Opus 1.6 are visible
-   through pkg-config. Native ALSA is optional listening/debug infrastructure,
-   not a prerequisite for the embedded milestones. ALSA 1.2.16.1 is installed and the optional
-   PCM output is implemented. Codec adapters and dither remain work.
-6. **Hardware qualification:** board-specific codec, PSRAM/cache, I2S clocks and
+5. **Supporting playback and codecs:** native WAV source/player, EOF/seek/gain
+   queue and host tests already work. The codec layer is being built on the
+   `eaf_decoder` adapter contract plus a bounded `eaf_decode_worker`; PCM is done
+   and FLAC (dr_flac), Opus (libopus), MP3 (dr_mp3) and Vorbis (stb_vorbis) follow.
+   Single-header decoders are vendored under `third_party/` with provenance and
+   licenses in `third_party/README.md` and `docs/licensing.md`. Native ALSA is
+   optional listening/debug infrastructure, not a prerequisite for the embedded
+   milestones. Dither remains work.
+6. **Platform backends:** Zephyr and standalone Linux are implemented; an
+   ESP-IDF v6.x HAL backend (FreeRTOS, lwIP, `driver/i2s_std.h`) is the next
+   backend, which also unlocks an ESPHome external-component path.
+7. **Hardware qualification:** board-specific codec, PSRAM/cache, I2S clocks and
    DMA validation; long-running network/Bluetooth stress, discontinuity tests,
    GPIO timing and multi-room phase measurements.
 
