@@ -1,0 +1,36 @@
+menu "EAF ESP-IDF Bluetooth board"
+
+config EAF_I2S_BCLK_GPIO
+    int "I2S BCLK GPIO"
+    default 26
+    help
+      Defaults match the WROVER + TAS5805M carrier: WS=25, BCLK=26, DOUT=22.
+
+config EAF_I2S_WS_GPIO
+    int "I2S WS (LRCLK) GPIO"
+    default 25
+
+config EAF_I2S_DOUT_GPIO
+    int "I2S serial data output GPIO"
+    default 22
+
+config EAF_BT_DEVICE_NAME
+    string "Bluetooth device name"
+    default "EAF Bluetooth Speaker"
+
+config EAF_BT_SAMPLE_RATE
+    int "A2DP sample rate (44100 or 48000)"
+    default 44100
+    range 44100 48000
+
+config EAF_BT_BLOCK_FRAMES
+    int "I2S block size in frames per channel"
+    default 128
+    range 16 1024
+
+config EAF_BT_RESERVOIR_FRAMES
+    int "Jitter reservoir capacity in frames (power of two)"
+    default 4096
+    range 512 65536
+
+endmenu

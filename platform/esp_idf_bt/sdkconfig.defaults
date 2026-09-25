@@ -1,0 +1,15 @@
+CONFIG_IDF_TARGET="esp32"
+# 1 ms tick gives the HAL's millisecond sleeps and role priorities useful
+# resolution; the default 100 Hz tick would round every short wait to 10 ms.
+CONFIG_FREERTOS_HZ=1000
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+# Classic Bluetooth with the Bluedroid host and the A2DP sink profile. The
+# external-codec option keeps A2DP in application space: Bluedroid hands over
+# undecoded SBC frames and EAF decodes them through the portable OI adapter.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_BLUEDROID_ENABLED=y
+CONFIG_BT_CLASSIC_ENABLED=y
+CONFIG_BT_A2DP_ENABLE=y
+CONFIG_BT_A2DP_USE_EXTERNAL_CODEC=y
