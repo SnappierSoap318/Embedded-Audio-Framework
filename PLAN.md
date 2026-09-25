@@ -38,10 +38,14 @@ The existing Q1.31 DSP and 32-bit I2S slots do not imply 32-bit source precision
    the native audio worker is created and gated before pipeline START. ALSA output and LMS
    stereo volume/mute now work in the Linux harness.
 3. **Bluetooth endpoint (started):** bounded SBC packet ingress and decode worker
-   with discontinuity resets, CRC rejection and partial reservoir writes. Optional
-   OI SBC decoding runs on Linux and Zephyr native_sim. Next: confirm controller,
-   test the new fixed-rate Zephyr A2DP endpoint binding with a phone. Radio,
-   pairing and LE Audio/LC3 remain unimplemented.
+   with discontinuity resets, CRC rejection and partial reservoir writes. The OI
+   SBC decoder is now vendored (`third_party/libsbc`, Apache-2.0) and built by
+   default, running on Linux and Zephyr native_sim. Both a fixed-rate Zephyr A2DP
+   endpoint binding and an ESP-IDF/Bluedroid binding (`hal/esp_idf/bt_a2dp_esp_idf.c`)
+   feed the same ingress; `platform/esp_idf_bt` is a Bluedroid Classic speaker
+   scaffold that builds clean under ESP-IDF v6.0.2. Next: physical pairing/playback,
+   source arbitration and Wi-Fi/BT coexistence. Radio and AAC/LDAC remain
+   unimplemented.
 4. **Clock synchronization:** define PTS and clock domains, presentation scheduling,
    bounded PI control, ASRC/hardware-PLL backends and +/-100 ppm tests. Required
    before claiming LMS multi-room accuracy.

@@ -78,6 +78,13 @@ There is no fixed finish date until these scopes and hardware gates are validate
   pairing/discoverability and bounded notification handoff. Coordinate queue purge,
   decoder reset and source arbitration across start/suspend/release/disconnect.
   Test real-phone reconnect and Wi-Fi/BT coexistence; only one PCM producer active.
+  Progress: the Zephyr binding and the ESP-IDF/Bluedroid binding
+  (`hal/esp_idf/bt_a2dp_esp_idf.c`) both feed the portable SBC ingress; the
+  vendored OI/libsbc decoder is built by default. `platform/esp_idf_bt` brings up
+  Bluedroid Classic (external-codec A2DP), the I2S sink and a reservoir-draining
+  output owner, and builds clean under ESP-IDF v6.0.2. Still open: physical
+  pairing/playback, discoverability/pairing policy, volume/mute, source
+  arbitration and Wi-Fi/BT coexistence. AAC/LDAC codecs remain separate.
 - [ ] **T09 — I2S drain/recovery and clock behavior.** Implement/verify EOF drain,
   driver queue starvation recovery and clean reconfigure. Scope clocks and prove
   DMA ownership/cache correctness on the actual ESP32 driver.

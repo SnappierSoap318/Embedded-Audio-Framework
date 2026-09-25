@@ -3,7 +3,8 @@
 [![CI](https://github.com/SnappierSoap318/Embedded-Audio-Framework/actions/workflows/ci.yml/badge.svg)](https://github.com/SnappierSoap318/Embedded-Audio-Framework/actions/workflows/ci.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-Embedded C11 audio framework targeting Zephyr, with Linux as its test harness.
+Embedded C11 audio framework with Zephyr and ESP-IDF backends, with Linux as its
+test harness.
 It provides a bounded SPSC audio reservoir, a static DSP pipeline, sink
 adapters (I2S, ALSA, null), and network players built on a shared output owner:
 a cleartext Sendspin player (Music Assistant) and a SlimProto/HTTP LMS client.
@@ -15,6 +16,7 @@ Licensed under the [GNU General Public License v3.0](LICENSE).
 Requires CMake 3.20+, a C11 compiler, pthreads, libm, and glibc `sem_clockwait`.
 
 ```sh
+git submodule update --init --recursive
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
 cmake --build build
 ctest --test-dir build --output-on-failure
@@ -53,6 +55,8 @@ cmake --build build-tsan && ctest --test-dir build-tsan --output-on-failure
 | Sendspin player | ESP32 (WROOM, WROVER + TAS5805M) | [platform/esp32_sendspin](platform/esp32_sendspin/README.md) |
 | LMS player | ESP32-WROOM + MAX98357 | [platform/esp32_lms](platform/esp32_lms/README.md) |
 | Boot/echo bring-up | ESP32 | [platform/esp32_boot](platform/esp32_boot/README.md) |
+| ESP-IDF v6 HAL/I2S smoke target | Classic ESP32 (WROVER pin defaults) | [Build instructions](docs/development.md#esp-idf-backend-and-smoke-target) |
+| Bluetooth A2DP SBC speaker | Classic ESP32 + TAS5805M (ESP-IDF) | [Bluetooth bindings](docs/bluetooth.md) |
 
 ### Bench reports
 
@@ -64,16 +68,35 @@ cmake --build build-tsan && ctest --test-dir build-tsan --output-on-failure
 
 ## Status
 
-Audible Sendspin playback is working on the ESP32-WROVER with a TAS5805M
-amplifier: stereo 44.1 kHz PCM, server-driven volume/mute, zero observed
-underruns across long runs, and manual track switching. The WROOM path is
-Wi-Fi-throughput limited for stereo. The MCUboot/OTA build still stalls I2S TX
-buffer completion at stream start, so direct boot is the working baseline; see
-the [I2S bench report](docs/bench/wrover-i2s-2026-09-20.md).
+Hardware I2S is under investigation on the ESP-IDF backend: a clean
+single-reader capture shows the console becomes unreadable during I2S init,
+while the same image restricted to the HAL semaphore/thread checks stays clean.
+Physical audio output and DMA behavior are not currently validated. The
+[I2S bench report](docs/bench/wrover-i2s-2026-09-20.md) is historical context,
+not evidence that the current hardware path passes.
+
+`platform/esp_idf_bt` adds a Classic Bluetooth A2DP SBC sink: a Bluedroid
+binding (external-codec mode) republishes undecoded SBC into the portable
+ingress and drives the vendored OI decoder into the I2S sink. It builds clean
+under ESP-IDF v6.0.2; pairing and playback against a real source are pending.
 
 `TASKS.md` is the authoritative remaining-work list. In brief: release
-qualification and recovery, restored OTA, selectable audio formats, Bluetooth
-A2DP, additional codecs, DSP controls, and synchronized multi-room playback.
+qualification and recovery, restored OTA, board codec integration and resource
+measurements, Bluetooth hardware validation and AAC/LDAC, DSP controls, and
+synchronized multi-room playback.
+
+### Codecs
+
+- The decoder/worker layer implements PCM, FLAC (`dr_flac`), MP3 (`dr_mp3`),
+  raw-packet Opus (fixed-point `libopus`) and Vorbis (`stb_vorbis`), with host
+  tests. The native `eaf_play` command remains WAV-only.
+- Sendspin negotiates configurable codec preferences and supports caller-owned
+  decoder adapters. Live incremental FLAC/MP3 needs an `await` hook serviced by
+  a decode thread; inline decoding currently stages the whole stream.
+  Opus/Vorbis support incremental decoding. Board availability depends on the
+  selected profile and its adapter wiring.
+- The ESP-IDF smoke manifest includes PCM and FLAC only. Codec implementation
+  and host tests do not establish MCU stack, heap, CPU or playback qualification.
 
 ## Building a board application
 
@@ -101,6 +124,44 @@ cmake -S platform/esp32_sendspin -B build-sendspin -G Ninja \
 
 See the [Sendspin board README](platform/esp32_sendspin/README.md) for
 credentials, PSRAM profiles, flashing and OTA.
+
+### ESP-IDF v6 smoke target
+
+`platform/esp_idf_sendspin` is a standalone HAL/I2S smoke project, not yet a
+networked Sendspin board player. Its component manifest selects portable code
+and the FreeRTOS/lwIP/`driver/i2s_std.h` backend independently of the root CMake
+build. Activate an ESP-IDF v6.x environment (locally tested: v6.0.2), then run
+from the repository root:
+
+```sh
+idf.py -C platform/esp_idf_sendspin set-target esp32
+idf.py -C platform/esp_idf_sendspin build
+```
+
+The current smoke entry point runs the HAL semaphore/thread/monotonic-clock
+checks and then plays a bounded 440 Hz I2S tone. A single-reader capture shows
+the console surviving the HAL checks but becoming unreadable during I2S
+initialization, so hardware I2S is under investigation. Default pins are WS=25,
+BCLK=26 and DOUT=22; see the
+[development workflow](docs/development.md#esp-idf-backend-and-smoke-target)
+for configuration and toolchain details. Shared board-output integration is
+still pending.
+
+### ESP-IDF Bluetooth A2DP sink
+
+`platform/esp_idf_bt` is a standalone Classic Bluetooth A2DP SBC speaker
+scaffold. It enables Bluedroid Classic with `CONFIG_BT_A2DP_USE_EXTERNAL_CODEC`
+so the stack hands over undecoded SBC frames, decodes them with the vendored OI
+decoder and drains a jitter reservoir into the ESP-IDF I2S sink. It builds with:
+
+```sh
+idf.py -C platform/esp_idf_bt set-target esp32
+idf.py -C platform/esp_idf_bt build
+```
+
+The device name and pins are configurable in
+`platform/esp_idf_bt/components/main/Kconfig.projbuild`. Pairing and playback
+against a real source, plus source arbitration and volume/mute, remain T08 work.
 
 ## Ownership and API contract
 
@@ -138,8 +199,9 @@ credentials, PSRAM profiles, flashing and OTA.
 ## Repository layout
 
 - `core/`, `include/eaf/` — reservoir, graph, DSP, control and public headers.
-- `apps/` — WAV decoder, player, LMS client, Bluetooth ingress/SBC, Sendspin.
-- `hal/` — Linux and Zephyr HAL, TCP/file/OS adapters, sinks.
+- `apps/` — WAV/PCM/FLAC/MP3/Opus/Vorbis decoders, player, LMS client,
+  Bluetooth ingress/SBC, Sendspin.
+- `hal/` — Linux, Zephyr and ESP-IDF HAL, TCP/file/OS adapters, sinks.
 - `platform/` — board applications, the shared output owner and native harness.
 - `tests/`, `tools/` — host tests and the clang-format/tidy/clangd checker.
 - `docs/` — design contracts, development workflow and bench reports.
@@ -159,10 +221,28 @@ committed; see the disclosure in [CONTRIBUTING.md](CONTRIBUTING.md#ai-assisted-d
 
 ## Scope
 
-Implemented: native file playback, Zephyr kernel/HAL integration, a stereo I2S
-adapter, a cleartext Sendspin player that is audible on the WROVER/TAS5805M
-bench, and the TCP/HTTP raw-PCM LMS client. Unfinished: Bluetooth
-pairing/profile negotiation and LC3 decoding, compressed file codecs, PLL/ASRC
-synchronization, multi-room timing, and release-qualification stress. Neither
-native_sim nor host tests establish physical DMA or multi-room timing
+### Implemented
+
+- Native WAV file playback and PCM/FLAC/MP3/Opus/Vorbis decoder adapters
+- Zephyr kernel/HAL integration and an ESP-IDF v6 HAL/smoke target
+- Zephyr and ESP-IDF Classic A2DP SBC sink bindings and a portable SBC
+  ingress/decoder (hardware validation pending)
+- Stereo I2S adapters (hardware validation in progress)
+- A cleartext Sendspin player with configurable codec negotiation
+- TCP/HTTP raw-PCM LMS client.
+
+---
+
+### Unfinished
+
+- Bluetooth hardware validation, pairing/profile ergonomics, source arbitration
+  and AAC/LDAC codecs
+- Compressed-codec board integration, live FLAC/MP3 decode-thread wiring and MCU
+  resource qualification
+- ESP-IDF board-output integration and hardware I2S investigation
+- PLL/ASRC synchronization
+- Multi-room timing
+- Release-qualification stress
+
+Neither native_sim nor host tests establish physical DMA or multi-room timing
 guarantees.

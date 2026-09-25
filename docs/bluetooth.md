@@ -1,4 +1,13 @@
-# Zephyr Classic A2DP binding
+# Classic A2DP bindings
+
+EAF exposes the same portable SBC ingress to two Classic A2DP sink bindings:
+Zephyr (`hal/zephyr/bt_a2dp_zephyr.c`) and ESP-IDF/Bluedroid
+(`hal/esp_idf/bt_a2dp_esp_idf.c`). Both advertise one SBC stream endpoint and
+republish media payload into `eaf_bt_ingress_t`; the portable
+`apps/bt/bt_decoder.c` worker decodes it through `apps/decoders/sbc_oi.c` and
+the vendored OI/libsbc decoder into a stereo reservoir.
+
+## Zephyr Classic A2DP binding
 
 `CONFIG_EAF_BT_A2DP` adds `eaf_bt_zephyr_register()`. It requires
 `CONFIG_BT_CLASSIC`, `CONFIG_BT_A2DP_SINK` and the EAF ingress queue. Enable the
@@ -36,3 +45,29 @@ compile the adapter through Kconfig against the actual stack instead.
 The native smoke passes. No physical controller, pairing, radio streaming, SDP
 integration or phone interoperability has been tested. A BR/EDR-capable controller
 is required; BLE-only hardware cannot run this Classic A2DP path.
+
+## ESP-IDF/Bluedroid A2DP sink
+
+`hal/esp_idf/bt_a2dp_esp_idf.c` adds the Bluedroid equivalent. The application
+owns controller and Bluedroid init/enable, the GAP device name, pairing and
+discoverability; after `esp_bluedroid_enable()` it calls
+`eaf_bt_esp_idf_register(queue, rate, notify, ctx)` once. The binding registers
+the A2DP callback, initializes the sink, advertises one SBC stream endpoint and
+registers the undecoded-audio callback (`esp_a2d_sink_register_audio_data_callback`).
+
+Bluedroid strips the RTP media header before the callback, so the binding
+rebuilds the media-header-first layout the portable ingress expects and forwards
+the timestamp. It cannot observe the AVDTP/RTP sequence number, so it supplies a
+local monotonic sequence and marks discontinuity on connect, configure, start,
+suspend and disconnect events instead. A small descriptor table
+(`eaf_bt_codec_desc_t`) pairs each codec's capability advertisement with its
+negotiated-configuration check; ESP-IDF v6.0.2 allows a single SEP
+(`ESP_A2D_MAX_SEPS`), so one codec is active at a time and AAC/LDAC are later
+table entries plus a selection source.
+
+`platform/esp_idf_bt` is the board scaffold: it enables Bluedroid Classic with
+`CONFIG_BT_A2DP_USE_EXTERNAL_CODEC`, starts the I2S sink, runs the portable
+ingress/SBC decode worker and an output owner draining the reservoir, then
+registers the binding and becomes discoverable. Source arbitration, volume/mute
+and pause remain T08 work. The project builds clean under ESP-IDF v6.0.2; no
+physical controller, pairing or playback has been tested.
