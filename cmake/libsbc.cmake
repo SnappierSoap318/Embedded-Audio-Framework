@@ -1,6 +1,11 @@
-# Optional host build of exactly the decoder used by the Zephyr manifest.
-# External source remains at the caller-supplied path, with its original license.
-set(EAF_LIBSBC_ROOT "" CACHE PATH "Zephyr libsbc checkout (8e1beda02acb8972e29e6edbb423f7cafe16e445)")
+# OI/libsbc decoder build (Apache-2.0, pinned revision). Uses the vendored copy
+# under third_party/libsbc by default; set EAF_LIBSBC_ROOT to an external
+# checkout to override. Vendor sources stay pristine.
+set(EAF_LIBSBC_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsbc" CACHE PATH
+  "OI/libsbc decoder root (8e1beda02acb8972e29e6edbb423f7cafe16e445)")
+if(NOT EAF_LIBSBC_ROOT)
+  set(EAF_LIBSBC_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libsbc")
+endif()
 if(EAF_LIBSBC_ROOT)
   set(sbc_files alloc bitalloc bitalloc-sbc bitstream-decode decoder-oina
     decoder-private decoder-sbc dequant framing framing-sbc oi_codec_version

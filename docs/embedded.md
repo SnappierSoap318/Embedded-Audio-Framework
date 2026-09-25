@@ -177,15 +177,18 @@ and [current A2DP sample requirements](https://docs.zephyrproject.org/latest/sam
 
 ## Building the real SBC path
 
-The optional dependency is Zephyr's Apache-2.0 OI/libsbc decoder, revision
-`8e1beda02acb8972e29e6edbb423f7cafe16e445`, imported by the pinned Zephyr manifest.
-The host build does not fetch it automatically:
+The OI/libsbc decoder (Apache-2.0, revision
+`8e1beda02acb8972e29e6edbb423f7cafe16e445`) is vendored under
+`third_party/libsbc` and built by default; no fetch is needed:
 
 ```sh
-cmake -S . -B build-bt-lms -DEAF_LIBSBC_ROOT=/path/to/libsbc
+cmake -S . -B build-bt-lms
 cmake --build build-bt-lms
 ctest --test-dir build-bt-lms --output-on-failure
 ```
+
+Set `-DEAF_LIBSBC_ROOT=/path/to/libsbc` to build against an external checkout
+instead.
 
 For the extended Zephyr smoke configuration:
 

@@ -14,13 +14,15 @@ Clangd uses `.clang-format` for editor formatting. `.clangd` points at `build-li
 
 ```sh
 cmake -S . -B build-lint -G Ninja -DCMAKE_C_COMPILER=clang \
-  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DEAF_LIBSBC_ROOT=/path/to/libsbc
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 cmake --build build-lint
 python3 tools/check_code.py
 ctest --test-dir build-lint --output-on-failure
 ```
 
-Omit EAF_LIBSBC_ROOT when not testing the optional decoder. The checker runs
+The SBC decoder is vendored under `third_party/libsbc`, so no path is needed.
+Set `EAF_LIBSBC_ROOT=/path/to/libsbc` only to build against an external checkout
+instead. The checker runs
 clang-format in verification mode, clang-tidy analyzer/bugprone checks and clangd
 parsing on project translation units and included headers. It excludes external
 vendor/generated sources. Clangd refactoring-tweak self-tests are disabled because

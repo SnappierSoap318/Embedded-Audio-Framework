@@ -19,6 +19,7 @@ in each file and, where present, as a sibling `LICENSE`.
 | dr_mp3 | `dr_libs/dr_mp3.h` | `dfe8377` | public domain (Unlicense) / MIT-0 |
 | dr_wav | `dr_libs/dr_wav.h` | `dfe8377` | public domain (Unlicense) / MIT-0 |
 | stb_vorbis | `stb/stb_vorbis.c` | `2c980bb` | public domain (Unlicense) / MIT |
+| OI/libsbc | `libsbc/decoder/` | `8e1beda` | Apache-2.0 (Android `system/embdrv/sbc`) |
 
 ## Git submodules
 
@@ -34,7 +35,7 @@ Not vendored and not required for a default build.
 
 | Component | Source | License | Notes |
 |---|---|---|---|
-| OI/libsbc | Zephyr `libsbc` checkout via `EAF_LIBSBC_ROOT` | Apache-2.0 | A2DP SBC decode; see [embedded.md](embedded.md) |
+| OI/libsbc (external) | Override `EAF_LIBSBC_ROOT` with a checkout | Apache-2.0 | Builds against an external copy instead of `third_party/libsbc` |
 
 ## Adding a dependency
 
