@@ -18,6 +18,27 @@ config EAF_BT_DEVICE_NAME
     string "Bluetooth device name"
     default "EAF Bluetooth Speaker"
 
+config EAF_AMP_SDA_GPIO
+    int "TAS5805M I2C SDA GPIO"
+    default 21
+
+config EAF_AMP_SCL_GPIO
+    int "TAS5805M I2C SCL GPIO"
+    default 27
+
+config EAF_AMP_PWDN_GPIO
+    int "TAS5805M power-down GPIO"
+    default 33
+
+config EAF_AMP_FAULT_GPIO
+    int "TAS5805M fault GPIO (external pull-up)"
+    default 34
+
+config EAF_AMP_I2C_ADDRESS
+    hex "TAS5805M I2C address"
+    default 0x2d
+    range 0x2c 0x2f
+
 config EAF_BT_SAMPLE_RATE
     int "A2DP sample rate (44100 or 48000)"
     default 44100

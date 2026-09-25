@@ -43,9 +43,11 @@ The existing Q1.31 DSP and 32-bit I2S slots do not imply 32-bit source precision
    default, running on Linux and Zephyr native_sim. Both a fixed-rate Zephyr A2DP
    endpoint binding and an ESP-IDF/Bluedroid binding (`hal/esp_idf/bt_a2dp_esp_idf.c`)
    feed the same ingress; `platform/esp_idf_bt` is a Bluedroid Classic speaker
-   scaffold that builds clean under ESP-IDF v6.0.2. Next: physical pairing/playback,
-   source arbitration and Wi-Fi/BT coexistence. Radio and AAC/LDAC remain
-   unimplemented.
+   scaffold that builds under ESP-IDF v6.0.2. Phone discovery and connection are
+   confirmed after controller-mode, NVS and GAP pairing fixes. Silent playback
+   exposed missing TAS5805M initialization; the board app now configures it after
+   starting I2S clocks (hardware retest pending). Next: audible playback,
+   source arbitration and Wi-Fi/BT coexistence. AAC/LDAC remain unimplemented.
 4. **Clock synchronization:** define PTS and clock domains, presentation scheduling,
    bounded PI control, ASRC/hardware-PLL backends and +/-100 ppm tests. Required
    before claiming LMS multi-room accuracy.

@@ -69,5 +69,32 @@ table entries plus a selection source.
 `CONFIG_BT_A2DP_USE_EXTERNAL_CODEC`, starts the I2S sink, runs the portable
 ingress/SBC decode worker and an output owner draining the reservoir, then
 registers the binding and becomes discoverable. Source arbitration, volume/mute
-and pause remain T08 work. The project builds clean under ESP-IDF v6.0.2; no
-physical controller, pairing or playback has been tested.
+and pause remain T08 work. The project builds under ESP-IDF v6.0.2; audible
+playback remains a hardware acceptance gate.
+
+The application initializes NVS before Bluedroid and explicitly initializes and
+enables the controller in `ESP_BT_MODE_CLASSIC_BT`. Disabling the BLE host alone
+does not select the controller mode: fresh builds also select
+`CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY`. The explicit initialization mode handles
+existing sdkconfigs that retain the dual-mode controller default.
+
+During ESP32 bring-up, a single-reader UART capture identified a reboot loop at
+`esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT)` with `ESP_ERR_INVALID_ARG`:
+ESP-IDF requires the enable mode to equal the initialization mode. Earlier
+truncated captures suggested a coexistence startup hang, but competing serial
+readers made that diagnosis unreliable. Stop the VS Code Serial Monitor before
+capturing with another reader. With the startup correction flashed, the user
+confirmed discovery on a phone; the phone then reported that it could not connect.
+
+Pairing uses the no-input/no-output SSP Just Works capability, with a GAP
+confirmation callback and authentication/ACL status logging. Legacy peers use
+PIN `0000`. The user confirmed phone connection with this correction, but no sound.
+
+The board application now initializes the TAS5805M over ESP-IDF's I2C master
+driver: SDA=21, SCL=27, address=0x2d, PDN=33 and FAULT=34 (external pull-up).
+These settings are configurable in the application's Kconfig. It commits a silent
+I2S block first to start clocks, resets/releases PDN, configures 32-bit standard
+I2S and enters Play via HiZ. I2C errors stop startup and put the amplifier back
+in power-down. This amplifier correction is build-validated, awaiting a board
+retest. UART output still becomes garbled during audio startup; stream/decode
+status cannot yet be established from that capture.
