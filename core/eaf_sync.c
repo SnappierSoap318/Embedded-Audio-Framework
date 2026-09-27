@@ -1,5 +1,4 @@
 #include <eaf/eaf_sync.h>
-#include <math.h>
 #include <stddef.h>
 
 void eaf_sync_controller_init(eaf_sync_controller_t *c, double kp, double ki, double limit_ppm) {
@@ -35,13 +34,12 @@ double eaf_sync_controller_update(eaf_sync_controller_t *c, double error_ms, dou
     return c->output_ppm;
 }
 
-double eaf_sync_ppm_to_ratio(double ppm) {
-    return 1.0 + ppm * 1e-6;
-}
-
-static int32_t interpolate(int32_t a, int32_t b, double t) {
-    double value = (double)a + ((double)b - (double)a) * t;
-    return (int32_t)lround(value);
+static int32_t interpolate(int32_t a, int32_t b, uint32_t fraction) {
+    int64_t delta = (int64_t)b - (int64_t)a;
+    int64_t product = delta * (int64_t)(fraction >> 1);
+    if (product >= 0)
+        return a + (int32_t)((product + INT64_C(1073741824)) >> 31);
+    return a - (int32_t)((-product + INT64_C(1073741824)) >> 31);
 }
 
 uint32_t eaf_sync_resample(const int32_t *in, uint32_t in_frames, int32_t *out, uint32_t out_frames,
@@ -54,16 +52,16 @@ uint32_t eaf_sync_resample(const int32_t *in, uint32_t in_frames, int32_t *out, 
                 out[(size_t)i * channels + c] = in[c];
         return out_frames;
     }
-    double step = (double)in_frames / (double)out_frames;
+    uint64_t step = ((uint64_t)in_frames << 32) / out_frames;
     for (uint32_t i = 0; i < out_frames; ++i) {
-        double position = (double)i * step;
-        uint32_t index = (uint32_t)position;
+        uint64_t position = (uint64_t)i * step;
+        uint32_t index = (uint32_t)(position >> 32);
         if (index >= in_frames - 1u) {
             for (uint8_t c = 0; c < channels; ++c)
                 out[(size_t)i * channels + c] = in[(size_t)(in_frames - 1u) * channels + c];
             continue;
         }
-        double fraction = position - (double)index;
+        uint32_t fraction = (uint32_t)position;
         for (uint8_t c = 0; c < channels; ++c)
             out[(size_t)i * channels + c] =
                 interpolate(in[(size_t)index * channels + c],
