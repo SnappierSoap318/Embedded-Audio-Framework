@@ -22,7 +22,7 @@ typedef enum {
 } speaker_event_kind_t;
 
 #define SPEAKER_TEXT_MAX 128u
-#define SPEAKER_TEXT_SLOTS 4u
+#define SPEAKER_TEXT_SLOTS 8u
 
 typedef struct {
     uint8_t slot;
