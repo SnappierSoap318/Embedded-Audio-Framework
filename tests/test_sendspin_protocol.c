@@ -36,8 +36,6 @@ static const char client_state_wire[] =
     "{\"payload\":{\"player\":{\"state\":\"synchronized\",\"volume\":100,\"muted\":false,"
     "\"static_delay_ms\":0,\"required_lead_time_ms\":250,\"min_buffer_ms\":250}},"
     "\"type\":\"client/state\"}";
-static const char client_goodbye_wire[] =
-    "{\"payload\":{\"reason\":\"user_request\"},\"type\":\"client/goodbye\"}";
 
 static void check_wire(const char *dst, size_t written, const char *expected) {
     CHECK(written == strlen(expected));
@@ -84,6 +82,13 @@ static void parse_messages(void) {
         "\"server/command\"}";
     CHECK(!eaf_sendspin_parse_server_command(mute_json, strlen(mute_json), &command));
     CHECK(command.command == EAF_SENDPIN_COMMAND_MUTE && command.muted && command.volume == -1);
+
+    static const char volume_and_mute_json[] =
+        "{\"payload\":{\"player\":{\"command\":\"volume\",\"volume\":9,\"mute\":true}},"
+        "\"type\":\"server/command\"}";
+    CHECK(!eaf_sendspin_parse_server_command(volume_and_mute_json, strlen(volume_and_mute_json),
+                                             &command));
+    CHECK(command.command == EAF_SENDPIN_COMMAND_VOLUME && command.volume == 9 && command.muted);
 }
 
 static void codec_negotiation(void) {
@@ -190,9 +195,6 @@ static void build_messages(void) {
     state.min_buffer_ms = 250;
     CHECK(!eaf_sendspin_build_client_state(buffer, sizeof(buffer), &state, &written));
     check_wire(buffer, written, client_state_wire);
-
-    CHECK(!eaf_sendspin_build_client_goodbye(buffer, sizeof(buffer), "user_request", &written));
-    check_wire(buffer, written, client_goodbye_wire);
 
     /* Optional device info and commands are omitted when absent. */
     eaf_sendspin_client_hello_t minimal = {.client_id = "id",

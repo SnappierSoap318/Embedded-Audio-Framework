@@ -1,8 +1,6 @@
+#include <eaf/eaf_bytes.h>
 #include <eaf/eaf_lms.h>
 #include <string.h>
-static uint32_t be32(const uint8_t *p) {
-    return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
-}
 void eaf_lms_parser_init(eaf_lms_parser_t *p, eaf_lms_packet_fn callback, void *ctx) {
     *p = (eaf_lms_parser_t){.on_packet = callback, .ctx = ctx};
 }
@@ -56,9 +54,9 @@ int eaf_lms_parse_stream(const uint8_t *p, size_t length, eaf_lms_stream_t *out)
                               .flags = p[15],
                               .threshold_kib = p[11],
                               .output_threshold_ds = p[16],
-                              .replay_gain = be32(p + 18),
-                              .server_port = (uint16_t)((uint16_t)p[22] * 256u + p[23]),
-                              .server_ipv4 = be32(p + 24),
+                              .replay_gain = eaf_bytes_read_u32(p + 18),
+                              .server_port = eaf_bytes_read_u16(p + 22),
+                              .server_ipv4 = eaf_bytes_read_u32(p + 24),
                               .request = p + 28,
                               .request_length = length - 28u};
     return EAF_OK;
@@ -78,8 +76,7 @@ int eaf_lms_helo(uint8_t *dst, size_t capacity, const uint8_t mac[6], const char
     // NOLINTNEXTLINE(bugprone-not-null-terminated-result)
     memcpy(dst, "HELO", 4);
     uint32_t payload = (uint32_t)len + 36u;
-    for (size_t i = 0; i < 4; ++i)
-        dst[4u + i] = (uint8_t)(payload >> ((3u - i) * 8u));
+    eaf_bytes_write_u32(dst + 4, payload);
     dst[8] = 12; /* SqueezePlay device family; capabilities identify EAF. */
     memcpy(dst + 10, mac, 6);
     memcpy(dst + 44, capabilities, len);

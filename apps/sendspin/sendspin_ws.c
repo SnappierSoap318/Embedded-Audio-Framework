@@ -1,3 +1,4 @@
+#include <eaf/eaf_bytes.h>
 #include <eaf/eaf_sendspin.h>
 #include <string.h>
 
@@ -99,15 +100,22 @@ int eaf_sendspin_ws_encode(uint8_t *dst, size_t capacity, uint8_t opcode, const 
         dst[3] = (uint8_t)length;
     } else {
         dst[1] = (uint8_t)(0x80u | 127u);
-        for (size_t i = 0; i < 8; ++i)
-            dst[2 + i] = (uint8_t)((uint64_t)length >> (56u - 8u * i));
+        eaf_bytes_write_u64(dst + 2, (uint64_t)length);
     }
     dst[position] = (uint8_t)mask_key;
     dst[position + 1] = (uint8_t)(mask_key >> 8);
     dst[position + 2] = (uint8_t)(mask_key >> 16);
     dst[position + 3] = (uint8_t)(mask_key >> 24);
-    for (size_t i = 0; i < length; ++i)
-        dst[position + 4u + i] = payload[i] ^ dst[position + (i & 3u)];
+    uint8_t *out = dst + position + 4u;
+    size_t i = 0;
+    for (; i + 4u <= length; i += 4u) {
+        out[i] = (uint8_t)(payload[i] ^ dst[position]);
+        out[i + 1u] = (uint8_t)(payload[i + 1u] ^ dst[position + 1u]);
+        out[i + 2u] = (uint8_t)(payload[i + 2u] ^ dst[position + 2u]);
+        out[i + 3u] = (uint8_t)(payload[i + 3u] ^ dst[position + 3u]);
+    }
+    for (; i < length; ++i)
+        out[i] = (uint8_t)(payload[i] ^ dst[position + (i & 3u)]);
     *written = total;
     return EAF_OK;
 }
@@ -126,12 +134,10 @@ static int begin_frame(eaf_sendspin_ws_rx_t *rx) {
     size_t position = 2u;
     uint64_t payload_length = length_code;
     if (length_code == 126u) {
-        payload_length = (uint64_t)rx->header[2] << 8 | rx->header[3];
+        payload_length = eaf_bytes_read_u16(rx->header + 2);
         position = 4u;
     } else if (length_code == 127u) {
-        payload_length = 0;
-        for (size_t i = 0; i < 8; ++i)
-            payload_length = payload_length << 8 | rx->header[2 + i];
+        payload_length = eaf_bytes_read_u64(rx->header + 2);
         position = 10u;
     }
     if (rx->masked)
@@ -210,10 +216,25 @@ int eaf_sendspin_ws_rx_feed(eaf_sendspin_ws_rx_t *rx, const uint8_t *data, size_
         size_t *used = is_control(rx->opcode) ? &rx->control_length : &rx->message_length;
         if (take && !target)
             return EAF_INVALID;
-        for (size_t i = 0; i < take; ++i) {
+        size_t i = 0;
+        if (rx->masked) {
+            while (i < take && ((rx->payload_used + i) & 3u) != 0u) {
+                target[*used + i] = (uint8_t)(data[i] ^ rx->mask[(rx->payload_used + i) & 3u]);
+                ++i;
+            }
+            uint32_t mask_word;
+            memcpy(&mask_word, rx->mask, 4);
+            for (; i + 4u <= take; i += 4u) {
+                uint32_t word;
+                memcpy(&word, data + i, 4);
+                word ^= mask_word;
+                memcpy(target + *used + i, &word, 4);
+            }
+        }
+        for (; i < take; ++i) {
             uint8_t byte = data[i];
             if (rx->masked)
-                byte ^= rx->mask[(rx->payload_used + i) & 3u];
+                byte = (uint8_t)(byte ^ rx->mask[(rx->payload_used + i) & 3u]);
             target[*used + i] = byte;
         }
         *used += take;

@@ -1,3 +1,4 @@
+#include <eaf/eaf_bytes.h>
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_lms_client.h>
 #include <string.h>
@@ -25,10 +26,6 @@ static void record_error(eaf_lms_client_t *c, int rc) {
             memcpy(c->diagnostics.error_opcode, c->opcode, 4);
     }
 }
-static void put32(uint8_t *p, uint32_t n) {
-    for (unsigned i = 0; i < 4; ++i)
-        p[i] = (uint8_t)(n >> ((3u - i) * 8u));
-}
 static int enqueue(eaf_lms_client_t *c, const char opcode[4], const void *body, size_t n) {
     if (c->tx_sent) {
         memmove(c->tx, c->tx + c->tx_sent, c->tx_used - c->tx_sent);
@@ -39,7 +36,7 @@ static int enqueue(eaf_lms_client_t *c, const char opcode[4], const void *body, 
         return EAF_IO;
     uint8_t *p = c->tx + c->tx_used;
     memcpy(p, opcode, 4);
-    put32(p + 4, (uint32_t)n);
+    eaf_bytes_write_u32(p + 4, (uint32_t)n);
     if (n)
         memcpy(p + 8, body, n);
     c->tx_used += 8u + n;
@@ -51,14 +48,14 @@ static int status(eaf_lms_client_t *c, const char event[4], uint32_t timestamp) 
     /* Jiffies is a monotonic millisecond clock, not a presentation timestamp.
        The stream/output buffer fields stay zero: reporting the small ingress
        ring as stream_buffer_size makes LMS throttle between STAT updates. */
-    put32(body + 15, (uint32_t)(c->bytes_received >> 32));
-    put32(body + 19, (uint32_t)c->bytes_received);
-    put32(body + 25, (uint32_t)(hal_monotonic_time_us() / 1000u));
-    put32(body + 29, c->playback.buffer_bytes);
-    put32(body + 33, c->playback.queued_bytes);
-    put32(body + 37, c->playback.elapsed_ms / 1000u);
-    put32(body + 43, c->playback.elapsed_ms);
-    put32(body + 47, timestamp);
+    eaf_bytes_write_u32(body + 15, (uint32_t)(c->bytes_received >> 32));
+    eaf_bytes_write_u32(body + 19, (uint32_t)c->bytes_received);
+    eaf_bytes_write_u32(body + 25, (uint32_t)(hal_monotonic_time_us() / 1000u));
+    eaf_bytes_write_u32(body + 29, c->playback.buffer_bytes);
+    eaf_bytes_write_u32(body + 33, c->playback.queued_bytes);
+    eaf_bytes_write_u32(body + 37, c->playback.elapsed_ms / 1000u);
+    eaf_bytes_write_u32(body + 43, c->playback.elapsed_ms);
+    eaf_bytes_write_u32(body + 47, timestamp);
     return enqueue(c, "STAT", body, sizeof(body));
 }
 static void stop_stream(eaf_lms_client_t *c) {

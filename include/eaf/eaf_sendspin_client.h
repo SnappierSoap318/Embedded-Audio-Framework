@@ -69,7 +69,6 @@ typedef struct {
     eaf_sendspin_stream_start_t stream;
     uint8_t rx_bytes[EAF_SENDPIN_RX_BYTES];
     uint8_t message[EAF_SENDPIN_MESSAGE_BYTES];
-    uint8_t frame[EAF_SENDPIN_JSON_BYTES + EAF_SENDPIN_WS_HEADER_MAX];
     uint8_t wire[EAF_SENDPIN_WIRE_BYTES];
     char json[EAF_SENDPIN_JSON_BYTES];
     char http[EAF_SENDPIN_HTTP_BYTES];
@@ -93,7 +92,3 @@ void eaf_sendspin_client_close(eaf_sendspin_client_t *client);
 
 bool eaf_sendspin_client_ready(const eaf_sendspin_client_t *client);
 bool eaf_sendspin_client_time_synchronized(const eaf_sendspin_client_t *client);
-int64_t eaf_sendspin_client_compute_client_time(const eaf_sendspin_client_t *client,
-                                                int64_t server_us);
-int64_t eaf_sendspin_client_compute_server_time(const eaf_sendspin_client_t *client,
-                                                int64_t client_us);
