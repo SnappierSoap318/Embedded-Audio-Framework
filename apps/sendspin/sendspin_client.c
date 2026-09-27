@@ -1,3 +1,4 @@
+#include <eaf/eaf_bytes.h>
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_sendspin_client.h>
 #include <string.h>
@@ -20,18 +21,6 @@ static bool find_header_end(const char *buffer, size_t length) {
     return false;
 }
 
-static size_t put_u64(char *dst, uint64_t value) {
-    char digits[20];
-    size_t n = 0;
-    do {
-        digits[n++] = (char)('0' + (value % 10u));
-        value /= 10u;
-    } while (value);
-    for (size_t i = 0; i < n; ++i)
-        dst[i] = digits[n - 1u - i];
-    return n;
-}
-
 static int format_host(uint32_t ipv4, uint16_t port, char *out, size_t capacity) {
     uint8_t octets[4] = {(uint8_t)(ipv4 >> 24), (uint8_t)(ipv4 >> 16), (uint8_t)(ipv4 >> 8),
                          (uint8_t)ipv4};
@@ -42,14 +31,18 @@ static int format_host(uint32_t ipv4, uint16_t port, char *out, size_t capacity)
                 return EAF_INVALID;
             out[used++] = '.';
         }
-        if (used + 20u >= capacity)
+        size_t n = eaf_bytes_write_u64_dec(out + used, capacity - used, octets[i]);
+        if (!n)
             return EAF_INVALID;
-        used += put_u64(out + used, octets[i]);
+        used += n;
     }
-    if (used + 7u >= capacity)
+    if (used + 1u >= capacity)
         return EAF_INVALID;
     out[used++] = ':';
-    used += put_u64(out + used, port);
+    size_t n = eaf_bytes_write_u64_dec(out + used, capacity - used, port);
+    if (!n || used + n >= capacity)
+        return EAF_INVALID;
+    used += n;
     out[used] = '\0';
     return EAF_OK;
 }
@@ -69,21 +62,20 @@ static uint32_t time_interval_ms(const eaf_sendspin_client_t *client) {
 
 static int queue_frame(eaf_sendspin_client_t *client, uint8_t opcode, const uint8_t *payload,
                        size_t length) {
-    size_t frame_length = 0;
-    uint32_t mask = eaf_sendspin_ws_prng_next(&client->prng);
-    if (eaf_sendspin_ws_encode(client->frame, sizeof(client->frame), opcode, payload, length, mask,
-                               &frame_length))
-        return EAF_INVALID;
-    if (client->wire_offset) {
+    size_t needed = length + EAF_SENDPIN_WS_HEADER_MAX;
+    if (client->wire_offset && client->wire_length + needed > sizeof(client->wire)) {
         size_t pending = client->wire_length - client->wire_offset;
         if (pending)
             memmove(client->wire, client->wire + client->wire_offset, pending);
         client->wire_length = pending;
         client->wire_offset = 0;
     }
-    if (client->wire_length + frame_length > sizeof(client->wire))
+    size_t frame_length = 0;
+    uint32_t mask = eaf_sendspin_ws_prng_next(&client->prng);
+    if (eaf_sendspin_ws_encode(client->wire + client->wire_length,
+                               sizeof(client->wire) - client->wire_length, opcode, payload, length,
+                               mask, &frame_length))
         return EAF_INVALID;
-    memcpy(client->wire + client->wire_length, client->frame, frame_length);
     client->wire_length += frame_length;
     return EAF_OK;
 }
@@ -284,11 +276,9 @@ int eaf_sendspin_client_connect(eaf_sendspin_client_t *client, uint32_t ipv4, ui
     if (rc)
         return rc;
     size_t written = 0;
-    if (eaf_sendspin_ws_build_upgrade(client->json, sizeof(client->json), host, "/sendspin", key,
-                                      &written) ||
-        written > sizeof(client->wire))
+    if (eaf_sendspin_ws_build_upgrade((char *)client->wire, sizeof(client->wire), host, "/sendspin",
+                                      key, &written))
         return fail(client);
-    memcpy(client->wire, client->json, written);
     client->wire_length = written;
     client->wire_offset = 0;
     client->http_used = 0;
@@ -368,14 +358,4 @@ bool eaf_sendspin_client_ready(const eaf_sendspin_client_t *client) {
 
 bool eaf_sendspin_client_time_synchronized(const eaf_sendspin_client_t *client) {
     return client && eaf_sendspin_time_synchronized(&client->filter);
-}
-
-int64_t eaf_sendspin_client_compute_client_time(const eaf_sendspin_client_t *client,
-                                                int64_t server_us) {
-    return client ? eaf_sendspin_compute_client_time(&client->filter, server_us) : server_us;
-}
-
-int64_t eaf_sendspin_client_compute_server_time(const eaf_sendspin_client_t *client,
-                                                int64_t client_us) {
-    return client ? eaf_sendspin_compute_server_time(&client->filter, client_us) : client_us;
 }
