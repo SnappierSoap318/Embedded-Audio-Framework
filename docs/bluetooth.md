@@ -119,20 +119,18 @@ made from application context. It provides:
   notifications. Control characters are stripped before storage or logging.
 - **Connection management.** The speaker is a passive Classic A2DP sink: it never
   initiates a connection (`esp_a2d_sink_connect` is not used), so unpairing on the
-  phone cannot make the speaker appear to call back. The last peer is remembered
-  in NVS and the device stays connectable and non-discoverable while a peer is
-  known, so that phone can reconnect on its own. It becomes generally discoverable
-  only during a pairing window (120 s) or when no peer is remembered; with no peer
-  the window re-opens indefinitely. If the remembered peer rejects our link key —
-  it unpaired on its side — the stale bond is removed and the speaker becomes
-  discoverable immediately, so a forgotten pairing cannot leave it invisible.
+  source cannot make the speaker appear to call back. Because it is headless, it
+  is connectable and generally discoverable whenever nothing is connected, and
+  neither while connected; that is the only way it can be (re)paired, and it means
+  an unpair can never leave the speaker invisible. The last peer is remembered in
+  NVS for status only; if that peer later rejects our link key, the stale bond is
+  removed.
 - **Headless pairing.** The device advertises a Class of Device of Audio/Video,
   minor loudspeaker, with the Audio and Rendering service bits, and uses SSP
   Just Works with IO capability `NoInputNoOutput`. The confirmation reply is
   accepted unconditionally (there is no display to compare a passkey), and
   legacy peers get a fixed PIN `0000`, so a source never has to type a code on
-  the speaker. A 120-second pairing window governs new pairings; `forget`
-  disconnects, removes all bonds and the remembered peer, then reopens pairing.
+  the speaker. `forget` disconnects, removes all bonds and the remembered peer.
 - **Stream lifecycle.** Two workers preserve the original producer/consumer
   split: a decoder producer drains the blocking ingress into the reservoir, and
   the audio owner drains the reservoir into I2S. Every A2DP state change marks

@@ -56,7 +56,7 @@ static uint8_t last_peer[6];
 /* The speaker is a passive sink: it never initiates A2DP connections. It only
  * accepts incoming connections, and is discoverable while pairing is open. */
 static bool have_peer, forgetting;
-static int64_t pair_until, save_at;
+static int64_t save_at;
 static nvs_handle_t settings;
 static bool settings_open, settings_dirty;
 
@@ -265,11 +265,14 @@ static void set_volume(unsigned value, bool muted, bool remote) {
 }
 
 static void scan_mode(void) {
-    bool available = !status.connected && !forgetting;
+    /* Headless device with no pairing button: whenever nothing is connected it is
+     * both connectable and generally discoverable, so a source can (re)pair at
+     * any time. While connected it is neither. */
+    bool idle = !status.connected && !forgetting;
     check("scan mode",
-          esp_bt_gap_set_scan_mode(available ? ESP_BT_CONNECTABLE : ESP_BT_NON_CONNECTABLE,
-                                   available && status.pairing ? ESP_BT_GENERAL_DISCOVERABLE
-                                                               : ESP_BT_NON_DISCOVERABLE));
+          esp_bt_gap_set_scan_mode(idle ? ESP_BT_CONNECTABLE : ESP_BT_NON_CONNECTABLE,
+                                   idle ? ESP_BT_GENERAL_DISCOVERABLE : ESP_BT_NON_DISCOVERABLE));
+    status.pairing = idle;
     publish();
 }
 
@@ -282,10 +285,7 @@ static void disconnect(void) {
 
 static void start_pairing(void) {
     disconnect();
-    status.pairing = true;
-    pair_until = now_ms() + 120000;
     scan_mode();
-    ESP_LOGI(TAG, "pairing window: 120 seconds");
 }
 
 static void show_status(void) {
@@ -329,17 +329,10 @@ static void handle_command(const event_t *event) {
             start_pairing();
         break;
     case SPEAKER_RECONNECT:
-        /* Close the pairing window and wait, connectable, for the known device. */
-        if (!forgetting && !status.connected) {
-            status.pairing = false;
-            if (!have_peer)
-                start_pairing();
-            else
-                scan_mode();
-        }
+        if (!forgetting)
+            start_pairing();
         break;
     case SPEAKER_DISCONNECT:
-        status.pairing = false;
         disconnect();
         scan_mode();
         break;
@@ -479,16 +472,6 @@ static void tick(void) {
             remove_at = now + 2000;
         }
     }
-    if (status.pairing && now >= pair_until) {
-        if (!have_peer && !link.connected) {
-            /* No device to return to: keep re-opening the pairing window so the
-             * speaker stays discoverable until something pairs. */
-            start_pairing();
-        } else {
-            status.pairing = false;
-            scan_mode();
-        }
-    }
     if (settings_dirty && now >= save_at)
         save_settings();
     if (atomic_exchange(&overflow, false)) {
@@ -503,10 +486,7 @@ static void tick(void) {
 static void control_task(void *arg) {
     (void)arg;
     refresh_bonds();
-    if (!have_peer)
-        start_pairing();
-    else
-        scan_mode();
+    scan_mode();
     for (;;) {
         event_t event;
         if (xQueueReceive(events, &event, pdMS_TO_TICKS(100)) == pdTRUE)
