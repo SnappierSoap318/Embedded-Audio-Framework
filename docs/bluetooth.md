@@ -122,11 +122,14 @@ made from application context. It provides:
 - **Pairing management.** A 120-second pairing window uses SSP Just Works (IO
   capability none). `forget` disconnects, removes all bonds and the remembered
   peer, then reopens pairing.
-- **Stream lifecycle.** Every A2DP state change publishes a new generation. The
-  single audio owner acknowledges it, purges SBC ingress, resets the decoder and
-  reservoir, restarts the sink and fades in. Media is gated until the owner
-  acknowledges, so a reset never races a copy and no stale audio survives a
-  pause, suspend or reconnect.
+- **Stream lifecycle.** Two workers preserve the original producer/consumer
+  split: a decoder producer drains the blocking ingress into the reservoir, and
+  the audio owner drains the reservoir into I2S. Every A2DP state change marks
+  the next ingress packet discontinuous, so the decoder resets its history at the
+  boundary; the decoder also resets on disconnect. The audio owner ramps gain up
+  from silence on each connect. The reservoir is never cursor-reset while
+  running, so a stream boundary cannot race the consumer; a short tail drains
+  naturally on pause or suspend.
 - **Buttonless control.** `speaker_command()` / `speaker_get_status()` plus a
   UART console: `bt status|pair|reconnect|disconnect|forget|mute|unmute|volume
   0..127`.
@@ -135,3 +138,10 @@ Only one PCM producer exists in this application; arbitration with Wi-Fi/LMS/
 Sendspin sources remains separate work. The controls above are build-validated
 and host-tested where portable; the AVRCP and connection paths await hardware
 testing.
+
+A first version merged the decoder into the I2S output loop and used a
+generation counter to gate media and reset the reservoir on every A2DP event.
+That produced audible stuttering: decoding on the output thread added latency
+before each blocking I2S write, and the per-event reservoir reset discarded
+buffered audio. The two-worker split above removes both; keep the decoder off the
+audio owner's critical path.

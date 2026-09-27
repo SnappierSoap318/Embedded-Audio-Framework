@@ -86,9 +86,10 @@ There is no fixed finish date until these scopes and hardware gates are validate
    SBC playback on ESP32/TAS5805M are user-confirmed. A first feature pass adds an
    owner-task control path (AVRCP volume/mute with NVS persistence, track
    metadata, reconnect with bounded backoff, a 120 s pairing window, forget/
-   remove-bond) and a coordinated stream-boundary reset that gates media until the
-   audio owner acknowledges. Still open: hardware testing of those controls,
-   source arbitration and Wi-Fi/BT coexistence. AAC/LDAC codecs remain separate.
+   remove-bond) and discontinuity-based stream-boundary handling on a separate
+   decode worker, so decoding never delays the I2S output. Still open: hardware
+   testing of those controls, source arbitration and Wi-Fi/BT coexistence.
+   AAC/LDAC codecs remain separate.
 - [ ] **T09 — I2S drain/recovery and clock behavior.** Implement/verify EOF drain,
   driver queue starvation recovery and clean reconfigure. Scope clocks and prove
   DMA ownership/cache correctness on the actual ESP32 driver.

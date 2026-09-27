@@ -163,8 +163,10 @@ The device name and pins are configurable in
 `platform/esp_idf_bt/components/main/Kconfig.projbuild`. Phone pairing and audible
 SBC playback on ESP32/TAS5805M are user-confirmed. The app adds AVRCP volume/mute,
 track metadata, reconnect/pairing-window management, forget/remove-bond, a
-coordinated stream-boundary reset and a UART control console; source arbitration
-and Wi-Fi/BT coexistence remain T08 work. The new controls await hardware testing.
+discontinuity-based stream-boundary handling and a UART control console. A
+separate decode worker keeps decoding off the I2S output path to avoid stutter.
+Source arbitration and Wi-Fi/BT coexistence remain T08 work; the new controls
+await hardware testing.
 
 ## Ownership and API contract
 

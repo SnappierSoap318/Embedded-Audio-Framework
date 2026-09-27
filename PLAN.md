@@ -48,10 +48,11 @@ The existing Q1.31 DSP and 32-bit I2S slots do not imply 32-bit source precision
    exposed missing TAS5805M initialization; the board app now configures it after
    starting I2S clocks; the user confirmed clear audible phone playback. A first
    feature pass adds AVRCP volume/mute, track metadata, reconnect/pairing-window
-   management, forget/remove-bond and a coordinated stream-boundary reset, with a
-   host test for the portable ramp/reset pieces. Next: source arbitration and
-   Wi-Fi/BT coexistence; the new controls need hardware testing. AAC/LDAC remain
-   unimplemented.
+   management, forget/remove-bond and discontinuity-based stream-boundary
+   handling, with a host test for the portable ramp/reset pieces. Decoding stays
+   on its own worker so it never delays the I2S output. Next: source arbitration
+   and Wi-Fi/BT coexistence; the new controls need hardware testing. AAC/LDAC
+   remain unimplemented.
 4. **Clock synchronization:** define PTS and clock domains, presentation scheduling,
    bounded PI control, ASRC/hardware-PLL backends and +/-100 ppm tests. Required
    before claiming LMS multi-room accuracy.
