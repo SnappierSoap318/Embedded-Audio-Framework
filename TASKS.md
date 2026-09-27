@@ -83,9 +83,12 @@ There is no fixed finish date until these scopes and hardware gates are validate
   vendored OI/libsbc decoder is built by default. `platform/esp_idf_bt` brings up
   Bluedroid Classic (external-codec A2DP), the I2S sink and a reservoir-draining
    output owner, and builds clean under ESP-IDF v6.0.2. Phone pairing and audible
-   SBC playback on ESP32/TAS5805M are user-confirmed. Still open:
-   discoverability/pairing policy, volume/mute, source
-  arbitration and Wi-Fi/BT coexistence. AAC/LDAC codecs remain separate.
+   SBC playback on ESP32/TAS5805M are user-confirmed. A first feature pass adds an
+   owner-task control path (AVRCP volume/mute with NVS persistence, track
+   metadata, reconnect with bounded backoff, a 120 s pairing window, forget/
+   remove-bond) and a coordinated stream-boundary reset that gates media until the
+   audio owner acknowledges. Still open: hardware testing of those controls,
+   source arbitration and Wi-Fi/BT coexistence. AAC/LDAC codecs remain separate.
 - [ ] **T09 — I2S drain/recovery and clock behavior.** Implement/verify EOF drain,
   driver queue starvation recovery and clean reconfigure. Scope clocks and prove
   DMA ownership/cache correctness on the actual ESP32 driver.

@@ -99,3 +99,39 @@ I2S and enters Play via HiZ. I2C errors stop startup and put the amplifier back
 in power-down. The user reported that playback was "playing perfectly" after
 this correction. UART output still becomes garbled during audio startup;
 quantitative stream/decode diagnostics cannot be established from that capture.
+
+## Speaker controls and connection management
+
+`platform/esp_idf_bt/components/main/speaker.c` runs one owner task for all
+Classic radio policy. A2DP/AVRCP callbacks only copy bounded, owned events into
+a queue; no borrowed metadata pointer escapes the callback and no stack call is
+made from application context. It provides:
+
+- **Volume and mute.** AVRCP target `SetAbsoluteVolume` (0..127) and
+  `RegisterNotification(VOLUME_CHANGE)`. Volume/mute persist in NVS. The audio
+  owner applies a squared-amplitude ramp over 256 frames together with mute, so
+  changes do not click. A local change sends a `CHANGED` notification; a remote
+  change is applied without echoing, avoiding a volume loop.
+- **Track metadata.** AVRCP controller metadata (title/artist/album) plus play
+  status and position, requested on connect/track change and re-armed via
+  notifications. Control characters are stripped before storage or logging.
+- **Connection management.** The last peer is remembered in NVS and
+  auto-reconnected with bounded backoff (five attempts, cap 32 s, then a pairing
+  window). The device is connectable and non-discoverable while a peer is known;
+  it is generally discoverable only during a pairing window.
+- **Pairing management.** A 120-second pairing window uses SSP Just Works (IO
+  capability none). `forget` disconnects, removes all bonds and the remembered
+  peer, then reopens pairing.
+- **Stream lifecycle.** Every A2DP state change publishes a new generation. The
+  single audio owner acknowledges it, purges SBC ingress, resets the decoder and
+  reservoir, restarts the sink and fades in. Media is gated until the owner
+  acknowledges, so a reset never races a copy and no stale audio survives a
+  pause, suspend or reconnect.
+- **Buttonless control.** `speaker_command()` / `speaker_get_status()` plus a
+  UART console: `bt status|pair|reconnect|disconnect|forget|mute|unmute|volume
+  0..127`.
+
+Only one PCM producer exists in this application; arbitration with Wi-Fi/LMS/
+Sendspin sources remains separate work. The controls above are build-validated
+and host-tested where portable; the AVRCP and connection paths await hardware
+testing.

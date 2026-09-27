@@ -1,5 +1,26 @@
 # Native validation
 
+## ESP32 Classic A2DP SBC speaker — 2026-09-27
+
+User-confirmed hardware results on the ESP32-WROVER + TAS5805M carrier running
+`platform/esp_idf_bt` (ESP-IDF v6.0.2): the device appears as "EAF Bluetooth
+Speaker", pairs from a phone with SSP Just Works, and produces clear audible SBC
+playback. This resolves the earlier silent-playback report, which was a missing
+TAS5805M power-up/I2S-format configuration rather than a decode fault.
+
+A single-reader UART capture also corrected an earlier misdiagnosis: the
+"coexistence hang" before `app_main` was a `ESP_ERR_INVALID_ARG` reboot loop at
+`esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT)` (enable mode must equal the
+initialization mode), with a second serial reader splitting the byte stream. The
+UART output still becomes garbled once I2S runs, so quantitative stream/decode
+diagnostics (underrun count, decode errors) are not yet available from the log.
+
+Not yet validated on hardware: AVRCP volume/mute, track metadata, reconnect/
+pairing-window management, forget/remove-bond, and the stream-boundary reset path
+added in this pass. Host coverage for the portable pieces: `bt_controls` checks
+the squared-amplitude mute ramp and the decoder stream-boundary reset; the full
+host suite is 34/34 with `check_code.py` at 70 translation units, 0 failed.
+
 ## P0: native LMS startup ownership
 
 The test includes the production native LMS callbacks and wraps thread creation

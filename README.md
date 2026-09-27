@@ -161,8 +161,10 @@ idf.py -C platform/esp_idf_bt build
 
 The device name and pins are configurable in
 `platform/esp_idf_bt/components/main/Kconfig.projbuild`. Phone pairing and audible
-SBC playback on ESP32/TAS5805M are user-confirmed. Connection lifecycle, source
-arbitration and volume/mute remain T08 work.
+SBC playback on ESP32/TAS5805M are user-confirmed. The app adds AVRCP volume/mute,
+track metadata, reconnect/pairing-window management, forget/remove-bond, a
+coordinated stream-boundary reset and a UART control console; source arbitration
+and Wi-Fi/BT coexistence remain T08 work. The new controls await hardware testing.
 
 ## Ownership and API contract
 
