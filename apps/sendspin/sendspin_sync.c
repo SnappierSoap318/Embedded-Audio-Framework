@@ -114,7 +114,12 @@ int64_t eaf_sendspin_compute_client_time(const eaf_sendspin_time_filter_t *f, in
     double effective_drift = f->element.use_drift ? f->element.drift : 0.0;
     double numerator = (double)server_time - f->element.offset +
                        effective_drift * (double)(int64_t)f->element.last_update;
-    return (int64_t)round(numerator / (1.0 + effective_drift));
+    double client_time = round(numerator / (1.0 + effective_drift));
+    if (client_time >= (double)INT64_MAX)
+        return INT64_MAX;
+    if (client_time < (double)INT64_MIN)
+        return INT64_MIN;
+    return (int64_t)client_time;
 }
 
 bool eaf_sendspin_time_synchronized(const eaf_sendspin_time_filter_t *f) {
