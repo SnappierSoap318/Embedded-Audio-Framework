@@ -8,6 +8,12 @@ typedef struct {
     int32_t x1, x2, y1, y2;
 } eaf_biquad_state_t;
 int32_t eaf_q31_multiply(int32_t sample, int32_t gain);
+/* Q16 gain in [0, 65536]; 65536 is exact unity. */
+static inline int32_t eaf_q16_multiply(int32_t sample, int32_t gain) {
+    if (gain >= 65536)
+        return sample;
+    return eaf_q31_multiply(sample, gain << 15);
+}
 int32_t eaf_biquad_tick(const eaf_biquad_coeff_t *c, eaf_biquad_state_t *s, int32_t x);
 int eaf_biquad_lowpass(eaf_biquad_coeff_t *c, double rate, double hz);
 int eaf_biquad_highpass(eaf_biquad_coeff_t *c, double rate, double hz);

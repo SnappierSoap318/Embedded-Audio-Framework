@@ -1,4 +1,5 @@
 #include <eaf/eaf_bt_volume.h>
+#include <eaf/eaf_dsp.h>
 
 void eaf_bt_volume_apply(eaf_bt_volume_t *gain, int32_t *stereo, size_t frames, uint8_t volume,
                          bool muted) {
@@ -15,6 +16,6 @@ void eaf_bt_volume_apply(eaf_bt_volume_t *gain, int32_t *stereo, size_t frames, 
             --gain->remaining;
         }
         for (size_t ch = 0; ch < 2; ++ch)
-            stereo[i * 2 + ch] = (int32_t)((int64_t)stereo[i * 2 + ch] * gain->current / 65536);
+            stereo[i * 2 + ch] = eaf_q16_multiply(stereo[i * 2 + ch], (int32_t)gain->current);
     }
 }

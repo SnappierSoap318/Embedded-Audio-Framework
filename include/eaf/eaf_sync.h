@@ -22,7 +22,9 @@ void eaf_sync_controller_reset(eaf_sync_controller_t *c);
 double eaf_sync_controller_update(eaf_sync_controller_t *c, double error_ms, double dt_s);
 
 /* Output/input frame ratio for a ppm correction: 1 + ppm*1e-6. */
-double eaf_sync_ppm_to_ratio(double ppm);
+static inline double eaf_sync_ppm_to_ratio(double ppm) {
+    return 1.0 + ppm * 1e-6;
+}
 
 /* Linear-interpolation resampler. Output sample 0 maps to input sample 0, so a
    fixed output block is produced from a slightly larger or smaller input block

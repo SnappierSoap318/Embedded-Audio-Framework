@@ -1,5 +1,30 @@
 #include <eaf/eaf_reservoir.h>
 #include <string.h>
+
+static void storage_store(int32_t *storage, uint32_t capacity, uint32_t start, const int32_t *src,
+                          uint32_t frames, size_t channels) {
+    uint32_t slot = start & (capacity - 1u);
+    uint32_t first = capacity - slot;
+    if (first > frames)
+        first = frames;
+    memcpy(storage + (size_t)slot * channels, src, (size_t)first * channels * sizeof(*src));
+    if (first < frames)
+        memcpy(storage, src + (size_t)first * channels,
+               (size_t)(frames - first) * channels * sizeof(*src));
+}
+
+static void storage_load(int32_t *dst, const int32_t *storage, uint32_t capacity, uint32_t start,
+                         uint32_t frames, size_t channels) {
+    uint32_t slot = start & (capacity - 1u);
+    uint32_t first = capacity - slot;
+    if (first > frames)
+        first = frames;
+    memcpy(dst, storage + (size_t)slot * channels, (size_t)first * channels * sizeof(*dst));
+    if (first < frames)
+        memcpy(dst + (size_t)first * channels, storage,
+               (size_t)(frames - first) * channels * sizeof(*dst));
+}
+
 int eaf_reservoir_init(eaf_reservoir_t *r, int32_t *storage, uint32_t capacity, eaf_format_t fmt,
                        uint32_t high_watermark) {
     if (!r || !storage || !eaf_format_valid(&fmt) || capacity < 2u || capacity > UINT32_MAX / 2u ||
@@ -44,10 +69,7 @@ uint32_t eaf_reservoir_write(eaf_reservoir_t *r, const int32_t *src, uint32_t fr
     if (frames > available)
         frames = available;
     size_t channels = r->format.num_channels;
-    for (uint32_t i = 0; i < frames; ++i) {
-        size_t slot = (write + i) & (r->capacity - 1u);
-        memcpy(r->storage + slot * channels, src + (size_t)i * channels, channels * sizeof(*src));
-    }
+    storage_store(r->storage, r->capacity, write, src, frames, channels);
     hal_atomic_set(&r->write_cursor, write + frames);
     return frames;
 }
@@ -70,11 +92,7 @@ int eaf_reservoir_pull(eaf_reservoir_t *r, eaf_buffer_t *buf) {
     buf->flags = 0;
     if (finished) {
         uint32_t take = available < n ? available : n;
-        for (uint32_t i = 0; i < take; ++i) {
-            size_t slot = (read + i) & (r->capacity - 1u);
-            memcpy(buf->samples + (size_t)i * channels, r->storage + slot * channels,
-                   channels * sizeof(int32_t));
-        }
+        storage_load(buf->samples, r->storage, r->capacity, read, take, channels);
         memset(buf->samples + (size_t)take * channels, 0,
                (size_t)(n - take) * channels * sizeof(int32_t));
         hal_atomic_set(&r->read_cursor, read + take);
@@ -92,11 +110,7 @@ int eaf_reservoir_pull(eaf_reservoir_t *r, eaf_buffer_t *buf) {
         r->state = EAF_RESERVOIR_STREAMING;
     if (r->state == EAF_RESERVOIR_STREAMING) {
         uint32_t take = available < n ? available : n;
-        for (uint32_t i = 0; i < take; ++i) {
-            size_t slot = (read + i) & (r->capacity - 1u);
-            memcpy(buf->samples + (size_t)i * channels, r->storage + slot * channels,
-                   channels * sizeof(int32_t));
-        }
+        storage_load(buf->samples, r->storage, r->capacity, read, take, channels);
         if (take < n) {
             /* Preserve queued frames and pad the shortfall with a short ramp from
                the last real sample. A mid-stream underrun resumes on the next pull
