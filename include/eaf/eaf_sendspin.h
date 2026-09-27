@@ -189,8 +189,6 @@ int eaf_sendspin_build_client_time(char *dst, size_t capacity, int64_t client_tr
                                    size_t *written);
 int eaf_sendspin_build_client_state(char *dst, size_t capacity,
                                     const eaf_sendspin_player_state_t *state, size_t *written);
-int eaf_sendspin_build_client_goodbye(char *dst, size_t capacity, const char *reason,
-                                      size_t *written);
 
 /* --- WebSocket (RFC 6455) -------------------------------------------------- */
 
