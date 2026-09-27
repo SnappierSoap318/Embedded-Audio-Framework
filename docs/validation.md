@@ -17,14 +17,20 @@ diagnostics (underrun count, decode errors) are not yet available from the log.
 
 After the controls pass, the user confirmed the device connects and responds to
 volume but was silent; the mute fix above restored clear audible playback.
-User-confirmed on hardware: playback is smooth, and both AVRCP volume and mute
-change the speaker output. Metrics were not instrumented, so the two-worker
-smoothness is a listening result rather than a measured underrun count. Track
-metadata, reconnect/pairing-window management and forget/remove-bond remain
-unvalidated on hardware. Host coverage: `bt_controls` checks the squared-
-amplitude mute ramp and the decoder stream-boundary reset, and `bt_binding`
-drives the A2DP binding's state machine; the full host suite is 35/35 with
-`check_code.py` at 71 translation units, 0 failed.
+User-confirmed on hardware: playback is smooth, both AVRCP volume and mute change
+the speaker output, and the speaker becomes discoverable again after the phone
+unpairs (it no longer initiates a connection). Metrics were not instrumented, so
+the two-worker smoothness is a listening result rather than a measured underrun
+count. Track metadata remains unvalidated on hardware. Host coverage:
+`bt_controls` checks the squared-amplitude mute ramp and the decoder
+stream-boundary reset, and `bt_binding` drives the A2DP binding's state machine;
+the full host suite is 35/35 with `check_code.py` at 71 translation units, 0
+failed.
+
+Pairing is SSP Just Works with `NoInputNoOutput` and a loudspeaker Class of
+Device; the user's phone pairs with no PIN. One PC still prompts for a PIN,
+which is that PC's stack negotiating legacy pairing rather than a fault in the
+ESP32 configuration — it cannot be forced to SSP from the device side.
 
 A first controls pass merged decoding into the I2S output worker and stuttered on
 hardware (user report): decoding on the output thread delayed each blocking I2S
