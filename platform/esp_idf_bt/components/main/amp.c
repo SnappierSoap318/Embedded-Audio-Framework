@@ -1,4 +1,5 @@
 #include "amp.h"
+#include "tas5805m.h"
 #include <driver/gpio.h>
 #include <driver/i2c_master.h>
 #include <eaf/eaf_types.h>
@@ -6,15 +7,28 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <sdkconfig.h>
+#include <string.h>
 
 static const char *TAG = "eaf_amp";
 static i2c_master_bus_handle_t bus;
 static i2c_master_dev_handle_t amp;
 
-static esp_err_t write_reg(uint8_t reg, uint8_t value) {
-    const uint8_t data[] = {reg, value};
-    return i2c_master_transmit(amp, data, sizeof(data), 100);
+static int amp_write(uint8_t reg, const uint8_t *data, size_t length, void *ctx) {
+    (void)ctx;
+    uint8_t buffer[8];
+    if (length + 1u > sizeof(buffer))
+        return -1;
+    buffer[0] = reg;
+    memcpy(buffer + 1u, data, length);
+    return i2c_master_transmit(amp, buffer, length + 1u, 100) == ESP_OK ? 0 : -1;
 }
+
+static bool amp_fault_asserted(void *ctx) {
+    (void)ctx;
+    return gpio_get_level(CONFIG_EAF_AMP_FAULT_GPIO) == 0;
+}
+
+static const tas5805m_io_t io = {amp_write, amp_fault_asserted, NULL};
 
 int board_amp_start(void) {
     esp_err_t err = gpio_set_level(CONFIG_EAF_AMP_PWDN_GPIO, 0);
@@ -50,24 +64,10 @@ int board_amp_start(void) {
     if (err != ESP_OK)
         goto fail;
 
-    /* Book/page selection must return to page zero before changing books.
-     * Match the carrier's Zephyr setup: BD modulation, 32-bit standard I2S,
-     * 175 kHz loop bandwidth and the ADR/FAULT pin configured as FAULT. */
-    static const uint8_t setup[][2] = {
-        {0x00, 0x00}, {0x7f, 0x00}, {0x03, 0x02}, {0x02, 0x00},
-        {0x33, 0x03}, {0x53, 0x60}, {0x61, 0x0b},
-    };
-    for (size_t i = 0; i < sizeof(setup) / sizeof(setup[0]); ++i) {
-        err = write_reg(setup[i][0], setup[i][1]);
-        if (err != ESP_OK)
-            goto fail;
-    }
-    vTaskDelay(pdMS_TO_TICKS(5));
-    err = write_reg(0x03, 0x03); /* Play, unmuted. */
-    if (err != ESP_OK)
+    if (tas5805m_bringup(&io) != EAF_OK)
         goto fail;
     ESP_LOGI(TAG, "TAS5805M playing at 0x%02x, fault=%d", CONFIG_EAF_AMP_I2C_ADDRESS,
-             gpio_get_level(CONFIG_EAF_AMP_FAULT_GPIO) == 0);
+             (int)tas5805m_fault(&io));
     return EAF_OK;
 
 fail:

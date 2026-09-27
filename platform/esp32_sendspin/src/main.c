@@ -22,6 +22,7 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT), "Qualify Wi-Fi alone before enabling Blueto
 
 static eaf_sendspin_client_t client;
 static eaf_sendspin_player_t player;
+static const tas5805m_io_t *board_amp;
 static struct net_if *iface;
 static struct net_mgmt_event_callback events;
 static atomic_bool associated;
@@ -61,7 +62,8 @@ static void start_output(const eaf_sendspin_stream_start_t *start) {
     } else {
         have_stream = true;
         apply_volume();
-        (void)tas5805m_play();
+        if (board_amp)
+            (void)tas5805m_play(board_amp);
         board_log("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
                   start->channels);
     }
@@ -208,7 +210,8 @@ int main(void) {
         board_log("Output initialization failed\n");
         return 1;
     }
-    (void)tas5805m_bringup();
+    board_amp = tas5805m_board_io();
+    (void)tas5805m_bringup(board_amp);
     eaf_sendspin_player_init(&player, board_write, NULL);
 
     uint32_t capacity = eaf_board_output_capacity_frames();
@@ -289,7 +292,7 @@ int main(void) {
                           (int)player.synchronized, (long long)(player.last_latency_us / 1000),
                           eaf_board_output_level(), eaf_board_output_flags(),
                           (unsigned long long)rate, volume_level, (int)volume_muted,
-                          (int)player.rate_ppm, (int)tas5805m_fault());
+                          (int)player.rate_ppm, board_amp ? (int)tas5805m_fault(board_amp) : 0);
                 wifi_health();
                 previous_rx = client.rx_total;
                 previous_ms = now;
