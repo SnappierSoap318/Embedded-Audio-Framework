@@ -1,4 +1,5 @@
 #pragma once
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -51,4 +52,42 @@ static inline int32_t eaf_pcm24_to_q31(int32_t x) {
 /* 32-bit PCM shares the Q1.31 range, so no scaling is required. */
 static inline int32_t eaf_pcm32_to_q31(int32_t x) {
     return x;
+}
+/* Clamp to [-1, 1], scale and round to nearest. */
+static inline int32_t eaf_float_to_q31(float x) {
+    if (x >= 1.0f)
+        return INT32_MAX;
+    if (x <= -1.0f)
+        return INT32_MIN;
+    return (int32_t)lrintf(x * 2147483647.0f);
+}
+/* Widen/upmix Q1.31 samples; mono source duplicates into a stereo dest. */
+static inline void eaf_q31_interleaved(const int32_t *src, uint32_t frames, uint8_t src_channels,
+                                       int32_t *dst, uint8_t dst_channels) {
+    for (uint32_t i = 0; i < frames; ++i) {
+        int32_t left = src[(size_t)i * src_channels];
+        if (dst_channels == 2u) {
+            int32_t right = src_channels == 2u ? src[(size_t)i * src_channels + 1u] : left;
+            dst[(size_t)i * 2u] = left;
+            dst[(size_t)i * 2u + 1u] = right;
+        } else {
+            dst[i] = left;
+        }
+    }
+}
+/* Widen/upmix signed 16-bit samples to interleaved Q1.31. */
+static inline void eaf_s16_to_q31_interleaved(const int16_t *src, uint32_t frames,
+                                              uint8_t src_channels, int32_t *dst,
+                                              uint8_t dst_channels) {
+    for (uint32_t i = 0; i < frames; ++i) {
+        int32_t left = eaf_pcm16_to_q31(src[(size_t)i * src_channels]);
+        if (dst_channels == 2u) {
+            int32_t right =
+                src_channels == 2u ? eaf_pcm16_to_q31(src[(size_t)i * src_channels + 1u]) : left;
+            dst[(size_t)i * 2u] = left;
+            dst[(size_t)i * 2u + 1u] = right;
+        } else {
+            dst[i] = left;
+        }
+    }
 }
