@@ -216,3 +216,54 @@ Platform selection is by build system, never by `#ifdef CONFIG_*` in owned
 translation units: Zephyr's `platform/esp32_*` CMake/Kconfig selects
 `hal/zephyr` and `platform/esp32_output`; the ESP-IDF project's component
 manifest selects `hal/esp_idf`; the native Linux build selects `hal/linux`.
+
+## Shared components (2026-09-27 dedup pass)
+
+The following duplication was removed; keep new code on these seams rather than
+re-deriving them:
+
+- `include/eaf/eaf_bytes.h` — big-endian `u16/u32/u64` read/write and a bounded
+  unsigned-decimal writer; used by LMS and Sendspin framing.
+- `include/eaf/eaf_types.h` — `eaf_float_to_q31` and
+  `eaf_s16_to_q31_interleaved`/`eaf_q31_interleaved` (mono upmix). All decoder
+  adapters and the BT/Sendspin players convert through these.
+- `include/eaf/eaf_decoder.h` — `eaf_decoder_validate_open` shared adapter
+  validation; `include/eaf/eaf_dec_input.h` adds the adapter push helper.
+- `hal/common/sink_i2s_core.c` + `include/eaf/eaf_sink_i2s_core.h` — the single
+  I2S DMA-ring `eaf_sink_ops` state machine (ownership, pause, drain-on-EOS,
+  retain-on-failure) behind a backend ops table. `hal/esp_idf/sink_i2s_esp_idf.c`
+  and `hal/zephyr/sink_i2s_zephyr.c` are thin backends that `#include` the core
+  source; do **not** also list `sink_i2s_core.c` in a component manifest or the
+  symbols duplicate. `tests/test_sink_i2s_core.c` injects backend failures.
+- `platform/esp32_output/board_output.c` — the shared output owner (reservoir +
+  DSP + worker + volume seqlock), now hook-driven (`sink`/`sink_init`/
+  `sink_pause`/`delay`). `platform/native_linux/play_lms.c` reuses it instead of
+  its former inline copy.
+- `platform/esp32_common/tas5805m.c` — the single TAS5805M register core
+  (`{write, fault_asserted, ctx}`); `tas5805m_zephyr.c` and the ESP-IDF
+  `platform/esp_idf_bt/components/main/amp.c` are transports.
+- `platform/esp32_common/wifi_bootstrap.{c,h}` — shared credential accessors and
+  `board_wifi_connect`; `board_runtime.c` routes `board_cpu_pin` to the Zephyr
+  CPU-pin HAL.
+- `platform/esp_idf_bt/components/main/speaker_{gap,avrcp,nvs}.c` — the speaker
+  owner is split behind `speaker_internal.h`; the queued event payload is a
+  `peer`/metadata union and metadata text lives in a pool, not on every event.
+
+Deferred on purpose (measure before forcing):
+
+- LMS and WebSocket share only the ~5-line "copy min(needed, available) and
+  complete" step; their header forms, fragmentation and dispatch differ enough
+  that a parameterised reassembler was judged larger than the duplication.
+- The BT decode worker's packet state machine and `eaf_decode_worker_step`
+  differ in input contract, reset-error precedence and counters; only the drain
+  shape is common, so it was left duplicated.
+- The SBC ingress slot-to-decoder copy cannot be dropped without changing the
+  by-value `eaf_bt_packet_t` contract used by `bt_decoder.c` and the transport
+  tests.
+
+Build verification gap: the dedup pass was verified on host Clang (39 tests,
+`check_code.py` clean), the no-ALSA fallback (36 tests) and both ESP-IDF
+projects. The Zephyr toolchain was not available in the isolated worktrees, so
+`hal/zephyr/sink_i2s_zephyr.c`, `tas5805m_zephyr.c`, `wifi_bootstrap.c` and the
+`board_runtime` forwarding were not compiled; run the Zephyr smoke and a
+`build-zephyr-bt-lms` `check_code.py` before trusting them on hardware.
