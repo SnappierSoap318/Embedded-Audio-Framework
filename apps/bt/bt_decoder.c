@@ -1,4 +1,13 @@
 #include <eaf/eaf_bt_decoder.h>
+int eaf_bt_decoder_reset(eaf_bt_decoder_t *d) {
+    if (!d || !d->decoder.reset)
+        return EAF_INVALID;
+    d->pending = 0;
+    d->sent = 0;
+    d->frames_left = 0;
+    d->offset = 0;
+    return d->decoder.reset(d->decoder.ctx);
+}
 int eaf_bt_decoder_init(eaf_bt_decoder_t *d, eaf_bt_ingress_t *q, eaf_reservoir_t *r,
                         const eaf_sbc_decoder_t *codec) {
     if (!d || !q || !r || !r->storage || !codec || !codec->frame || !codec->reset ||

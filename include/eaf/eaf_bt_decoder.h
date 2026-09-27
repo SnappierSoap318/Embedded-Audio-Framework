@@ -26,3 +26,6 @@ int eaf_bt_decoder_init(eaf_bt_decoder_t *, eaf_bt_ingress_t *, eaf_reservoir_t 
    No radio calls, no heap, no blocking. Errors drop remaining packet and reset
    history; owner decides whether to continue or terminate. */
 int eaf_bt_decoder_step(eaf_bt_decoder_t *);
+/* Audio owner discards in-flight compressed/PCM state on a stream boundary.
+ * Does not touch ingress or reservoir cursors: the owner resets those separately. */
+int eaf_bt_decoder_reset(eaf_bt_decoder_t *);

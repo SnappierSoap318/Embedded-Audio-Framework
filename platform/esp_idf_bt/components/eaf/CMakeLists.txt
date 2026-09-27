@@ -9,6 +9,7 @@ idf_component_register(
     "${EAF_ROOT}/core/eaf_reservoir.c"
     "${EAF_ROOT}/apps/bt/bt_ingress.c"
     "${EAF_ROOT}/apps/bt/bt_decoder.c"
+    "${EAF_ROOT}/apps/bt/bt_volume.c"
     "${EAF_ROOT}/apps/decoders/sbc_oi.c"
     "${EAF_ROOT}/hal/common/hal_atomic_c11.c"
     "${EAF_ROOT}/hal/esp_idf/hal_os_esp_idf.c"
