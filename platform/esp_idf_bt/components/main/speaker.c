@@ -53,9 +53,10 @@ static speaker_status_t status = {.volume = 127, .playback_status = 0xff};
 static bool ct_connected, tg_connected, volume_subscribed;
 static esp_avrc_rn_evt_cap_mask_t capabilities;
 static uint8_t last_peer[6];
-static bool have_peer, automatic = true, attempting, cancelling, forgetting;
-static unsigned attempts;
-static int64_t pair_until, retry_at, attempt_until, save_at;
+/* The speaker is a passive sink: it never initiates A2DP connections. It only
+ * accepts incoming connections, and is discoverable while pairing is open. */
+static bool have_peer, forgetting;
+static int64_t pair_until, save_at;
 static nvs_handle_t settings;
 static bool settings_open, settings_dirty;
 
@@ -274,15 +275,11 @@ static void scan_mode(void) {
 static void disconnect(void) {
     eaf_bt_esp_idf_status_t link;
     eaf_bt_esp_idf_status(&link);
-    if (link.connected || link.connecting || attempting) {
-        uint8_t peer[6];
-        memcpy(peer, attempting ? last_peer : link.peer, 6);
-        check("disconnect", esp_a2d_sink_disconnect(peer));
-    }
+    if (link.connected || link.connecting)
+        check("disconnect", esp_a2d_sink_disconnect(link.peer));
 }
 
 static void start_pairing(void) {
-    automatic = false;
     disconnect();
     status.pairing = true;
     pair_until = now_ms() + 120000;
@@ -302,7 +299,6 @@ static void show_status(void) {
  * explicit forget command and when a peer that unpaired on its side rejects our
  * link key, so a stale bond cannot keep the speaker invisible. */
 static void begin_forget(void) {
-    automatic = false;
     forgetting = true;
     have_peer = false;
     status.pairing = false;
@@ -332,16 +328,16 @@ static void handle_command(const event_t *event) {
             start_pairing();
         break;
     case SPEAKER_RECONNECT:
-        if (!forgetting && !status.connected && !attempting) {
+        /* Close the pairing window and wait, connectable, for the known device. */
+        if (!forgetting && !status.connected) {
             status.pairing = false;
-            automatic = true;
-            attempts = 0;
-            retry_at = now_ms();
-            scan_mode();
+            if (!have_peer)
+                start_pairing();
+            else
+                scan_mode();
         }
         break;
     case SPEAKER_DISCONNECT:
-        automatic = false;
         status.pairing = false;
         disconnect();
         scan_mode();
@@ -452,25 +448,21 @@ static void tick(void) {
     eaf_bt_esp_idf_status(&link);
     if (link.connected != status.connected) {
         status.connected = link.connected;
-        attempting = cancelling = false;
         if (link.connected) {
             memcpy(last_peer, link.peer, sizeof(last_peer));
             have_peer = true;
-            attempts = 0;
             status.pairing = false;
-            automatic = !forgetting;
             settings_dirty = true;
             save_at = now + 2000;
             refresh_bonds();
         } else {
             clear_track();
-            retry_at = now + 2000;
         }
         ESP_LOGI(TAG, "A2DP connected=%d", status.connected);
         scan_mode();
     }
     status.streaming = link.streaming;
-    if (forgetting && !link.connected && !link.connecting && !attempting) {
+    if (forgetting && !link.connected && !link.connecting) {
         /* Remove one at a time; wait for the asynchronous list to change before
          * requesting the next. Polling also recovers a lost completion event. */
         static int64_t remove_at;
@@ -493,40 +485,7 @@ static void tick(void) {
             start_pairing();
         } else {
             status.pairing = false;
-            automatic = have_peer;
-            attempts = 0;
-            retry_at = now;
             scan_mode();
-        }
-    }
-    if (attempting && !link.connected && now >= attempt_until) {
-        if (!cancelling) {
-            disconnect();
-            cancelling = true;
-            attempt_until = now + 10000;
-        } else {
-            attempting = cancelling = false;
-            /* Never start overlapping attempts if cancellation has not settled. */
-            if (link.connecting)
-                automatic = false;
-            retry_at = now + (int64_t)(2000u << (attempts > 4 ? 4 : attempts));
-        }
-    }
-    if (link.ready && automatic && have_peer && !forgetting && !status.pairing && !link.connected &&
-        !link.connecting && !attempting && now >= retry_at) {
-        if (attempts >= 3) {
-            /* The peer never answered; open the pairing window so any device can
-             * pair while we keep the remembered peer connectable. */
-            ESP_LOGW(TAG, "no reconnect from the remembered peer; pairing");
-            start_pairing();
-        } else {
-            esp_err_t err = esp_a2d_sink_connect(last_peer);
-            ++attempts;
-            check("reconnect", err);
-            attempting = err == ESP_OK;
-            attempt_until = now + 12000;
-            retry_at = now + (int64_t)(2000u << attempts);
-            ESP_LOGI(TAG, "reconnect attempt %u/3", attempts);
         }
     }
     if (settings_dirty && now >= save_at)
