@@ -28,10 +28,12 @@ size_t eaf_dec_input_push(eaf_dec_input_t *input, const uint8_t *data, size_t le
     size_t space = input->capacity - input->count;
     size_t take = length < space ? length : space;
     size_t write = (input->tail + input->count) % input->capacity;
-    for (size_t i = 0; i < take; ++i) {
-        input->ring[write] = data[i];
-        write = (write + 1u) % input->capacity;
-    }
+    size_t first = input->capacity - write;
+    if (first > take)
+        first = take;
+    memcpy(input->ring + write, data, first);
+    if (take > first)
+        memcpy(input->ring, data + first, take - first);
     input->count += take;
     return take;
 }

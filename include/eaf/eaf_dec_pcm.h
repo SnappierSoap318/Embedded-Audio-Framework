@@ -1,4 +1,5 @@
 #pragma once
+#include <eaf/eaf_dec_input.h>
 #include <eaf/eaf_decoder.h>
 
 /* Built-in PCM passthrough adapter. It buffers little-endian PCM bytes and
@@ -15,8 +16,7 @@ typedef struct {
     uint8_t output_channels;
     size_t sample_bytes;
     size_t frame_bytes;
-    size_t tail;
-    size_t count;
+    eaf_dec_input_t input;
     uint8_t ring[EAF_DECODER_PCM_RING_BYTES];
 } eaf_decoder_pcm_t;
 
