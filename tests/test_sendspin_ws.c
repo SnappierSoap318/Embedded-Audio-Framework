@@ -130,6 +130,25 @@ static void test_decode(void) {
     feed_all(&rx, masked, 11, on_message);
     CHECK(messages == 3 && last_opcode == EAF_SENDPIN_WS_TEXT && last_length == 5 &&
           !memcmp(last_payload, "hello", 5));
+
+    uint8_t bulk_frame[64];
+    uint8_t bulk_plain[16];
+    for (size_t i = 0; i < sizeof(bulk_plain); ++i)
+        bulk_plain[i] = (uint8_t)(i * 7u + 1u);
+    bulk_frame[0] = 0x82u;
+    bulk_frame[1] = (uint8_t)(0x80u | sizeof(bulk_plain));
+    bulk_frame[2] = 0x11u;
+    bulk_frame[3] = 0x22u;
+    bulk_frame[4] = 0x33u;
+    bulk_frame[5] = 0x44u;
+    for (size_t i = 0; i < sizeof(bulk_plain); ++i)
+        bulk_frame[6u + i] = (uint8_t)(bulk_plain[i] ^ bulk_frame[2u + (i & 3u)]);
+    CHECK(!eaf_sendspin_ws_rx_feed(&rx, bulk_frame, 7u, on_message, NULL));
+    CHECK(!eaf_sendspin_ws_rx_feed(&rx, bulk_frame + 7u, 6u + sizeof(bulk_plain) - 7u, on_message,
+                                   NULL));
+    CHECK(messages == 4 && last_opcode == EAF_SENDPIN_WS_BINARY &&
+          last_length == sizeof(bulk_plain) &&
+          !memcmp(last_payload, bulk_plain, sizeof(bulk_plain)));
 }
 
 static void test_fragmentation(void) {
