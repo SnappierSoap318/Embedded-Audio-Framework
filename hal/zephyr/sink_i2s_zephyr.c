@@ -80,6 +80,7 @@ static int zephyr_configure(eaf_i2s_core_t *core, const eaf_format_t *fmt, size_
 }
 
 static int zephyr_write(eaf_i2s_core_t *core, const void *data, size_t bytes, size_t *written) {
+    (void)core;
     int cache_rc = sys_cache_data_flush_range((void *)data, bytes);
     if (cache_rc && cache_rc != -ENOTSUP)
         return cache_rc;
@@ -91,16 +92,19 @@ static int zephyr_write(eaf_i2s_core_t *core, const void *data, size_t bytes, si
 }
 
 static int zephyr_start(eaf_i2s_core_t *core) {
+    (void)core;
     return i2s_trigger(zephyr_ctx.device, I2S_DIR_TX, I2S_TRIGGER_START);
 }
 
 static int zephyr_drop(eaf_i2s_core_t *core) {
+    (void)core;
     return i2s_trigger(zephyr_ctx.device, I2S_DIR_TX, I2S_TRIGGER_DROP);
 }
 
 /* Reclaim every DMA slot after DRAIN. This waits for driver ownership release,
    not a measurement of the amplifier's presentation latency. */
 static int zephyr_drain(eaf_i2s_core_t *core) {
+    (void)core;
     int trigger_rc = i2s_trigger(zephyr_ctx.device, I2S_DIR_TX, I2S_TRIGGER_DRAIN);
     if (trigger_rc)
         return trigger_rc;
