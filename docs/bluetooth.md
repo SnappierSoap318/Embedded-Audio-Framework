@@ -69,8 +69,9 @@ table entries plus a selection source.
 `CONFIG_BT_A2DP_USE_EXTERNAL_CODEC`, starts the I2S sink, runs the portable
 ingress/SBC decode worker and an output owner draining the reservoir, then
 registers the binding and becomes discoverable. Source arbitration, volume/mute
-and pause remain T08 work. The project builds under ESP-IDF v6.0.2; audible
-playback remains a hardware acceptance gate.
+and pause remain T08 work. The project builds under ESP-IDF v6.0.2. The user
+confirmed phone pairing and clear audible SBC playback on the ESP32/TAS5805M
+carrier after flashing the amplifier initialization correction.
 
 The application initializes NVS before Bluedroid and explicitly initializes and
 enables the controller in `ESP_BT_MODE_CLASSIC_BT`. Disabling the BLE host alone
@@ -95,6 +96,6 @@ driver: SDA=21, SCL=27, address=0x2d, PDN=33 and FAULT=34 (external pull-up).
 These settings are configurable in the application's Kconfig. It commits a silent
 I2S block first to start clocks, resets/releases PDN, configures 32-bit standard
 I2S and enters Play via HiZ. I2C errors stop startup and put the amplifier back
-in power-down. This amplifier correction is build-validated, awaiting a board
-retest. UART output still becomes garbled during audio startup; stream/decode
-status cannot yet be established from that capture.
+in power-down. The user reported that playback was "playing perfectly" after
+this correction. UART output still becomes garbled during audio startup;
+quantitative stream/decode diagnostics cannot be established from that capture.
