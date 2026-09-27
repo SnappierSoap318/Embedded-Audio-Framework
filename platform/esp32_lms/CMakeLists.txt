@@ -16,9 +16,11 @@ target_sources(app PRIVATE src/main.c src/output.c)
 target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/board_output.c)
 target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/log_buffer.c
   ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/diagnostics.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/wifi_bootstrap.c)
+  ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/wifi_bootstrap.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/board_runtime.c)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output
-  ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common)
+  ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common
+  ${CMAKE_CURRENT_SOURCE_DIR}/../../hal/zephyr)
 if(CONFIG_EAF_BOARD_I2S)
   target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/sink_i2s.c)
 else()
@@ -28,11 +30,6 @@ if(CONFIG_EAF_BOARD_USE_PSRAM)
   target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/storage_psram.c)
 else()
   target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_output/storage_internal.c)
-endif()
-if(CONFIG_SCHED_CPU_MASK)
-  target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/cpu_pin_zephyr.c)
-else()
-  target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/cpu_pin_stub.c)
 endif()
 if(CONFIG_WIFI_ESP32)
   target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../esp32_common/wifi_power_esp32.c)
