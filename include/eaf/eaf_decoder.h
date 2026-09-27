@@ -53,6 +53,24 @@ typedef struct {
     void *ctx;
 } eaf_decoder_t;
 
+/* Common open() gating: codec match, 1/2-channel layout (mono may expand to
+   stereo) and rate match. `unknown_channels` permits cfg->channels == 0 for
+   containers that do not declare a count. */
+static inline int eaf_decoder_validate_open(const eaf_decoder_config_t *cfg,
+                                            const eaf_format_t *output, eaf_codec_t codec,
+                                            bool unknown_channels) {
+    bool channels_ok;
+    if (cfg->channels == 0u) {
+        channels_ok = unknown_channels;
+    } else {
+        channels_ok = cfg->channels <= 2u && (output->num_channels == cfg->channels ||
+                                              (cfg->channels == 1u && output->num_channels == 2u));
+    }
+    if (cfg->codec != codec || !channels_ok || cfg->sample_rate != output->sample_rate)
+        return EAF_UNSUPPORTED;
+    return EAF_OK;
+}
+
 /* Contract enforcement shared by every caller. `open` additionally validates
    cfg and output; the others reject unopened/malformed adapters. */
 int eaf_decoder_open(eaf_decoder_t *decoder, const eaf_decoder_config_t *cfg,

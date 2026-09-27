@@ -4,15 +4,6 @@
 
 #include <string.h>
 
-static int32_t float_to_q31(float sample) {
-    double value = (double)sample;
-    if (value >= 1.0)
-        return INT32_MAX;
-    if (value <= -1.0)
-        return INT32_MIN;
-    return (int32_t)(value * 2147483647.0);
-}
-
 static void vorbis_release(eaf_dec_vorbis_t *state) {
     if (state->v) {
         stb_vorbis_close((stb_vorbis *)state->v);
@@ -22,15 +13,9 @@ static void vorbis_release(eaf_dec_vorbis_t *state) {
 
 static int vorbis_open(void *ctx, const eaf_decoder_config_t *cfg, const eaf_format_t *output) {
     eaf_dec_vorbis_t *state = ctx;
-    if (cfg->codec != EAF_CODEC_VORBIS)
-        return EAF_UNSUPPORTED;
-    if (cfg->channels > 2u)
-        return EAF_UNSUPPORTED;
-    if (cfg->channels != 0u && output->num_channels != cfg->channels &&
-        !(cfg->channels == 1u && output->num_channels == 2u))
-        return EAF_UNSUPPORTED;
-    if (cfg->sample_rate != output->sample_rate)
-        return EAF_UNSUPPORTED;
+    int rc = eaf_decoder_validate_open(cfg, output, EAF_CODEC_VORBIS, true);
+    if (rc)
+        return rc;
     vorbis_release(state);
     state->length = 0;
     state->vorbis_channels = cfg->channels;
@@ -96,9 +81,9 @@ static int vorbis_pull(void *ctx, int32_t *pcm, uint32_t max_frames, uint32_t *f
             if ((uint32_t)samples > max_frames)
                 return EAF_INVALID; /* owner must supply a full-frame buffer */
             for (uint32_t i = 0; i < (uint32_t)samples; ++i) {
-                int32_t left = float_to_q31(output[0][i]);
+                int32_t left = eaf_float_to_q31(output[0][i]);
                 if (state->output_channels == 2u) {
-                    int32_t right = channels > 1 ? float_to_q31(output[1][i]) : left;
+                    int32_t right = channels > 1 ? eaf_float_to_q31(output[1][i]) : left;
                     pcm[(size_t)i * 2u] = left;
                     pcm[(size_t)i * 2u + 1u] = right;
                 } else {

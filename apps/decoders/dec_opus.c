@@ -5,15 +5,9 @@
 
 static int opus_open(void *ctx, const eaf_decoder_config_t *cfg, const eaf_format_t *output) {
     eaf_dec_opus_t *state = ctx;
-    if (cfg->codec != EAF_CODEC_OPUS)
-        return EAF_UNSUPPORTED;
-    if (cfg->channels == 0u || cfg->channels > 2u)
-        return EAF_UNSUPPORTED;
-    if (output->num_channels != cfg->channels &&
-        !(cfg->channels == 1u && output->num_channels == 2u))
-        return EAF_UNSUPPORTED;
-    if (cfg->sample_rate != output->sample_rate)
-        return EAF_UNSUPPORTED;
+    int rc = eaf_decoder_validate_open(cfg, output, EAF_CODEC_OPUS, false);
+    if (rc)
+        return rc;
     int error = OPUS_OK;
     OpusDecoder *decoder =
         opus_decoder_create((opus_int32)cfg->sample_rate, (int)cfg->channels, &error);
@@ -65,18 +59,8 @@ static int opus_pull(void *ctx, int32_t *pcm, uint32_t max_frames, uint32_t *fra
     }
     uint32_t available = state->decoded_frames - state->decoded_pos;
     uint32_t count = available < max_frames ? available : max_frames;
-    for (uint32_t i = 0; i < count; ++i) {
-        size_t source = (size_t)(state->decoded_pos + i) * state->channels;
-        int32_t left = eaf_pcm16_to_q31(state->temp[source]);
-        if (state->output_channels == 2u) {
-            int32_t right =
-                state->channels == 2u ? eaf_pcm16_to_q31(state->temp[source + 1u]) : left;
-            pcm[(size_t)i * 2u] = left;
-            pcm[(size_t)i * 2u + 1u] = right;
-        } else {
-            pcm[i] = left;
-        }
-    }
+    eaf_s16_to_q31_interleaved(state->temp + (size_t)state->decoded_pos * state->channels, count,
+                               state->channels, pcm, state->output_channels);
     state->decoded_pos += count;
     *frames = count;
     *format = state->format;

@@ -1,4 +1,5 @@
 #pragma once
+#include <eaf/eaf_types.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -32,3 +33,16 @@ void eaf_dec_input_finish(eaf_dec_input_t *input);
 size_t eaf_dec_input_push(eaf_dec_input_t *input, const uint8_t *data, size_t length);
 /* Fill up to length bytes; returns the count read. May block via await. */
 size_t eaf_dec_input_read(eaf_dec_input_t *input, void *out, size_t length);
+
+/* Adapter boilerplate shared by the callback-style (FLAC/MP3) decoders. */
+static inline void eaf_dec_input_set_await(eaf_dec_input_t *input, eaf_dec_await_fn await,
+                                           void *await_ctx) {
+    input->await = await;
+    input->await_ctx = await_ctx;
+}
+
+static inline int eaf_dec_input_push_adapter(eaf_dec_input_t *input, const uint8_t *data,
+                                             size_t length, size_t *consumed) {
+    *consumed = eaf_dec_input_push(input, data, length);
+    return EAF_OK;
+}

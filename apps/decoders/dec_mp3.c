@@ -16,8 +16,7 @@ static size_t mp3_read(void *ctx, void *out, size_t bytes) {
 void eaf_dec_mp3_configure(eaf_dec_mp3_t *state, eaf_dec_await_fn await, void *await_ctx) {
     if (!state)
         return;
-    state->input.await = await;
-    state->input.await_ctx = await_ctx;
+    eaf_dec_input_set_await(&state->input, await, await_ctx);
 }
 
 void eaf_dec_mp3_finish(eaf_dec_mp3_t *state) {
@@ -34,25 +33,19 @@ static void mp3_uninit(eaf_dec_mp3_t *state) {
 
 static int mp3_open(void *ctx, const eaf_decoder_config_t *cfg, const eaf_format_t *output) {
     eaf_dec_mp3_t *state = ctx;
-    if (cfg->codec != EAF_CODEC_MP3)
-        return EAF_UNSUPPORTED;
-    if (cfg->channels > 2u)
-        return EAF_UNSUPPORTED;
-    if (cfg->channels != 0u && output->num_channels != cfg->channels &&
-        !(cfg->channels == 1u && output->num_channels == 2u))
-        return EAF_UNSUPPORTED;
-    if (cfg->sample_rate != output->sample_rate)
-        return EAF_UNSUPPORTED;
+    int rc = eaf_decoder_validate_open(cfg, output, EAF_CODEC_MP3, true);
+    if (rc)
+        return rc;
     mp3_uninit(state);
-    free(state->mp3);
-    state->mp3 = malloc(sizeof(drmp3));
-    if (state->mp3 == NULL)
-        return EAF_IO;
+    if (state->mp3 == NULL) {
+        state->mp3 = malloc(sizeof(drmp3));
+        if (state->mp3 == NULL)
+            return EAF_IO;
+    }
     state->initialized = false;
     eaf_dec_input_init(&state->input, state->ring, EAF_DEC_MP3_RING_BYTES, state->input.await,
                        state->input.await_ctx);
     state->cfg_channels = cfg->channels;
-    state->mp3_channels = cfg->channels;
     state->output_channels = output->num_channels;
     state->format = *output;
     return EAF_OK;
@@ -60,8 +53,7 @@ static int mp3_open(void *ctx, const eaf_decoder_config_t *cfg, const eaf_format
 
 static int mp3_push(void *ctx, const uint8_t *data, size_t length, size_t *consumed) {
     eaf_dec_mp3_t *state = ctx;
-    *consumed = eaf_dec_input_push(&state->input, data, length);
-    return EAF_OK;
+    return eaf_dec_input_push_adapter(&state->input, data, length, consumed);
 }
 
 static int mp3_pull(void *ctx, int32_t *pcm, uint32_t max_frames, uint32_t *frames,
@@ -109,18 +101,8 @@ static int mp3_pull(void *ctx, int32_t *pcm, uint32_t max_frames, uint32_t *fram
         (size_t)drmp3_read_pcm_frames_s16((drmp3 *)state->mp3, (drmp3_uint64)cap, state->temp);
     if (got == 0u)
         return EAF_OK;
-    for (size_t i = 0; i < got; ++i) {
-        size_t source = i * state->mp3_channels;
-        int32_t left = eaf_pcm16_to_q31(state->temp[source]);
-        if (state->output_channels == 2u) {
-            int32_t right =
-                state->mp3_channels == 2u ? eaf_pcm16_to_q31(state->temp[source + 1u]) : left;
-            pcm[i * 2u] = left;
-            pcm[i * 2u + 1u] = right;
-        } else {
-            pcm[i] = left;
-        }
-    }
+    eaf_s16_to_q31_interleaved(state->temp, (uint32_t)got, state->mp3_channels, pcm,
+                               state->output_channels);
     *frames = (uint32_t)got;
     *format = state->format;
     return EAF_OK;

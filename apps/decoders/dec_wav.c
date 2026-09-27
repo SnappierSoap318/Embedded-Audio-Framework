@@ -23,15 +23,23 @@ static int read_frames(eaf_source_t *source, int32_t *samples, uint32_t capacity
     if (rc)
         return rc;
     size_t width = w->bits / 8u;
-    for (size_t i = 0; i < (size_t)take * w->format.num_channels; ++i) {
-        const unsigned char *p = w->scratch + i * width;
-        uint32_t raw = 0;
-        for (size_t byte = 0; byte < width; ++byte)
-            raw |= (uint32_t)p[byte] << (byte * 8u);
-        int64_t signed_sample = raw;
-        if (raw & (UINT32_C(1) << (w->bits - 1u)))
-            signed_sample -= INT64_C(1) << w->bits;
-        samples[i] = (int32_t)(signed_sample * (INT64_C(1) << (32u - w->bits)));
+    if (w->bits == 16u) {
+        eaf_s16_to_q31_interleaved((const int16_t *)w->scratch, take, w->format.num_channels,
+                                   samples, w->format.num_channels);
+    } else {
+        for (size_t i = 0; i < (size_t)take * w->format.num_channels; ++i) {
+            const unsigned char *p = w->scratch + i * width;
+            uint32_t raw = 0;
+            for (size_t byte = 0; byte < width; ++byte)
+                raw |= (uint32_t)p[byte] << (byte * 8u);
+            if (w->bits == 24u) {
+                if ((raw & 0x800000u) != 0u)
+                    raw |= 0xFF000000u;
+                samples[i] = eaf_pcm24_to_q31((int32_t)raw);
+            } else {
+                samples[i] = eaf_pcm32_to_q31((int32_t)raw);
+            }
+        }
     }
     w->position += take;
     *frames = take;

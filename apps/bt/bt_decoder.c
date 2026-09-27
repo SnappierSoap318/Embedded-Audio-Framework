@@ -61,8 +61,7 @@ int eaf_bt_decoder_step(eaf_bt_decoder_t *d) {
     if ((!d->frames_left && d->offset != d->packet.length) ||
         (d->frames_left && d->offset == d->packet.length))
         return reject(d, EAF_INVALID);
-    for (size_t i = 0; i < (size_t)frames * 2u; ++i)
-        d->pcm31[i] = eaf_pcm16_to_q31(d->pcm16[i]);
+    eaf_s16_to_q31_interleaved(d->pcm16, frames, 2u, d->pcm31, 2u);
     d->pending = frames;
     d->sent = eaf_reservoir_write(d->reservoir, d->pcm31, frames);
     return EAF_OK;
