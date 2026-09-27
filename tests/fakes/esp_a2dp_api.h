@@ -111,4 +111,5 @@ esp_err_t esp_a2d_register_callback(esp_a2d_cb_t callback);
 esp_err_t esp_a2d_sink_init(void);
 esp_err_t esp_a2d_sink_register_stream_endpoint(uint8_t seid, esp_a2d_mcc_t *mcc);
 esp_err_t esp_a2d_sink_register_audio_data_callback(esp_a2d_sink_audio_data_cb_t callback);
+esp_err_t esp_a2d_sink_disconnect(esp_bd_addr_t bd_addr);
 void esp_a2d_audio_buff_free(esp_a2d_audio_buff_t *audio_buf);

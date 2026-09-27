@@ -32,3 +32,7 @@ typedef struct {
     bool ready, connected, connecting, streaming;
 } eaf_bt_esp_idf_status_t;
 void eaf_bt_esp_idf_status(eaf_bt_esp_idf_status_t *status);
+
+/* Ask the host to drop the current A2DP link. Returns EAF_OK when a disconnect
+ * was issued, EAF_STATE when no link is up, or a negative EAF code. */
+int eaf_bt_esp_idf_disconnect(void);

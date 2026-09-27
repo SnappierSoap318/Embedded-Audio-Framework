@@ -26,6 +26,13 @@ esp_err_t esp_a2d_sink_register_audio_data_callback(esp_a2d_sink_audio_data_cb_t
     captured_audio_cb = callback;
     return ESP_OK;
 }
+static int disconnect_calls;
+static uint8_t disconnect_peer[6];
+esp_err_t esp_a2d_sink_disconnect(esp_bd_addr_t bd_addr) {
+    ++disconnect_calls;
+    memcpy(disconnect_peer, bd_addr, 6);
+    return ESP_OK;
+}
 void esp_a2d_audio_buff_free(esp_a2d_audio_buff_t *audio_buf) {
     (void)audio_buf;
 }
@@ -99,6 +106,7 @@ int main(void) {
 
     status(&st);
     CHECK(!st.ready && !st.connected && !st.streaming);
+    CHECK(eaf_bt_esp_idf_disconnect() == EAF_STATE);
 
     esp_a2d_cb_param_t evt;
     memset(&evt, 0, sizeof(evt));
@@ -111,6 +119,8 @@ int main(void) {
     connect(peer, ESP_A2D_CONNECTION_STATE_CONNECTED);
     status(&st);
     CHECK(st.connected && !st.streaming && memcmp(st.peer, peer, 6) == 0);
+    CHECK(eaf_bt_esp_idf_disconnect() == EAF_OK);
+    CHECK(disconnect_calls == 1 && memcmp(disconnect_peer, peer, 6) == 0);
     configure(true);
     audio_state(ESP_A2D_AUDIO_STATE_STARTED);
     status(&st);
