@@ -33,77 +33,60 @@ static eaf_reservoir_t reservoir;
 static int32_t reservoir_storage[CONFIG_EAF_BT_RESERVOIR_FRAMES * 2];
 static eaf_sbc_oi_t sbc;
 static eaf_sbc_decoder_t sbc_decoder;
+static eaf_thread_t decode_thread;
 static eaf_thread_t output_thread;
 
 static void on_event(void *ctx, eaf_bt_esp_idf_event_t event) {
     (void)ctx;
     (void)event;
-    /* Workers poll the binding's lossless generation/status snapshot. */
+    /* Workers poll the binding's status snapshot. */
 }
 
+/* Decoder producer: drains the blocking ingress into the reservoir. It runs at
+ * the decoder priority, below the audio owner, so a full reservoir never delays
+ * an I2S block. The reservoir's high watermark keeps the output fed through
+ * Bluedroid's bursty media delivery. */
+static void decode_entry(void *arg) {
+    (void)arg;
+    bool was_connected = false;
+    for (;;) {
+        eaf_bt_esp_idf_status_t status;
+        eaf_bt_esp_idf_status(&status);
+        if (was_connected && !status.connected)
+            (void)eaf_bt_decoder_reset(&decoder);
+        was_connected = status.connected;
+        if (status.streaming) {
+            int rc = eaf_bt_decoder_step(&decoder);
+            if (rc != EAF_OK)
+                ESP_LOGW(TAG, "SBC decode error=%d", rc);
+        }
+        vTaskDelay(1);
+    }
+}
+
+/* Output consumer: owns the reservoir read cursor and the I2S sink. Applying
+ * gain here keeps volume changes off the Bluetooth callback task. */
 static void output_entry(void *arg) {
     (void)arg;
     eaf_sink_t *sink = &eaf_esp_idf_i2s_sink;
-    eaf_bt_esp_idf_status_t stream = {0};
     eaf_bt_volume_t gain = {0};
-    unsigned errors = 0, sink_failures = 0;
-    /* Restarting the sink and dropping queued audio is the recovery for both a
-     * stream boundary and a transient I2S write failure; bounded so a hardware
-     * fault still stops instead of looping. */
     for (;;) {
-        /* One worker owns BOTH reservoir cursors and decoder state. No reset
-         * races the output reader. sync purges ingress with its producer gated. */
-        if (eaf_bt_esp_idf_sync(&stream)) {
-            if (sink->ops->stop(sink) != EAF_OK || sink->ops->start(sink) != EAF_OK)
-                break;
-            eaf_reservoir_reset(&reservoir);
-            if (eaf_bt_decoder_reset(&decoder) != EAF_OK)
-                break;
-            gain = (eaf_bt_volume_t){0};
-        }
-        if (stream.streaming) {
-            /* Bounded catch-up; each step decodes at most 128 frames. */
-            for (unsigned i = 0; i < 16 && !eaf_reservoir_backpressure(&reservoir); ++i) {
-                int rc = eaf_bt_decoder_step(&decoder);
-                if (rc != EAF_OK && (++errors & 127u) == 1u)
-                    ESP_LOGW(TAG, "SBC decode error=%d total=%u", rc, errors);
-            }
-        }
         eaf_buffer_t *buffer = NULL;
         if (sink->ops->acquire_buf(sink, &buffer) != EAF_OK) {
-            if (++sink_failures > 8)
-                break;
             vTaskDelay(1);
             continue;
         }
         if (eaf_reservoir_pull(&reservoir, buffer) != EAF_OK)
-            break;
-        eaf_bt_esp_idf_status_t latest;
-        eaf_bt_esp_idf_status(&latest);
-        if (!latest.streaming || latest.generation != stream.generation)
             memset(buffer->samples, 0, buffer->frame_count * 2u * sizeof(int32_t));
         unsigned level = speaker_audio_level();
         eaf_bt_volume_apply(&gain, buffer->samples, buffer->frame_count, (uint8_t)(level & 127u),
                             (level & 128u) != 0);
-        if (sink->ops->commit_buf(sink, buffer) != EAF_OK) {
-            /* A failed write leaves the sink holding the block, so drain and
-             * restart before retrying; a persistent fault ends the worker. */
-            if (sink->ops->stop(sink) != EAF_OK || sink->ops->start(sink) != EAF_OK)
-                break;
-            eaf_reservoir_reset(&reservoir);
-            if (eaf_bt_decoder_reset(&decoder) != EAF_OK)
-                break;
-            gain = (eaf_bt_volume_t){0};
-            if (++sink_failures > 8)
-                break;
+        int rc = sink->ops->commit_buf(sink, buffer);
+        if (rc != EAF_OK) {
+            ESP_LOGW(TAG, "i2s commit: %d", rc);
             vTaskDelay(1);
-            continue;
         }
-        sink_failures = 0;
-        /* The blocking I2S write paces this worker even while output is silent. */
     }
-    ESP_LOGE(TAG, "audio owner stopped after sink/decoder failure");
-    (void)sink->ops->stop(sink);
 }
 
 static int start_audio(void) {
@@ -143,7 +126,11 @@ static int start_audio(void) {
     if (eaf_bt_decoder_init(&decoder, &ingress, &reservoir, &sbc_decoder) != EAF_OK)
         return EAF_IO;
 
+    const eaf_thread_options_t decoder_options = {EAF_THREAD_DECODER, -1, false};
     const eaf_thread_options_t audio_options = {EAF_THREAD_AUDIO, -1, false};
+    if (hal_thread_create_with_options(&decode_thread, decode_entry, NULL, &decoder_options) !=
+        EAF_OK)
+        return EAF_IO;
     if (hal_thread_create_with_options(&output_thread, output_entry, NULL, &audio_options) !=
         EAF_OK)
         return EAF_IO;

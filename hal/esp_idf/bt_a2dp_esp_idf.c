@@ -57,7 +57,8 @@ static struct {
     uint32_t sample_rate;
     uint16_t sequence;
     bool registered, configured;
-    uint32_t acknowledged;
+    /* Written only on the Bluedroid callback task; read by the decode worker. */
+    volatile bool streaming;
     eaf_bt_esp_idf_status_t status;
     /* Single serialized Bluedroid producer, so one staging buffer is enough. */
     uint8_t staging[1u + EAF_BT_PACKET_BYTES];
@@ -72,80 +73,80 @@ void eaf_bt_esp_idf_status(eaf_bt_esp_idf_status_t *status) {
     portEXIT_CRITICAL(&lock);
 }
 
-bool eaf_bt_esp_idf_sync(eaf_bt_esp_idf_status_t *status) {
-    if (!status)
-        return false;
-    portENTER_CRITICAL(&lock);
-    bool changed = status->generation != state.status.generation;
-    if (changed) {
-        if (state.ingress)
-            eaf_bt_ingress_init(state.ingress);
-        state.acknowledged = state.status.generation;
-    }
-    *status = state.status;
-    portEXIT_CRITICAL(&lock);
-    return changed;
-}
-
 static void emit(eaf_bt_esp_idf_event_t event) {
     if (state.notify)
         state.notify(state.ctx, event);
 }
 
+/* Runs on the Bluedroid callback task, which is also where a2d_cb runs, so the
+ * ingress has a single serialized producer and needs no lock. Keeping the copy
+ * outside any critical section leaves the I2S worker free to run. */
 static void audio_data_cb(esp_a2d_conn_hdl_t conn_hdl, esp_a2d_audio_buff_t *audio_buf) {
     (void)conn_hdl;
     if (!audio_buf)
         return;
-    portENTER_CRITICAL(&lock);
-    if (state.status.streaming && state.acknowledged == state.status.generation &&
-        audio_buf->data && audio_buf->number_frame && audio_buf->number_frame <= 15u &&
-        audio_buf->data_len <= EAF_BT_PACKET_BYTES) {
+    if (state.streaming && audio_buf->data && audio_buf->number_frame &&
+        audio_buf->number_frame <= 15u && audio_buf->data_len <= EAF_BT_PACKET_BYTES) {
         state.staging[0] = (uint8_t)(audio_buf->number_frame & 0x0fu);
         memcpy(&state.staging[1], audio_buf->data, audio_buf->data_len);
         (void)eaf_bt_sbc_receive(state.ingress, state.sequence++, audio_buf->timestamp,
                                  state.staging, (size_t)audio_buf->data_len + 1u);
     }
-    portEXIT_CRITICAL(&lock);
     esp_a2d_audio_buff_free(audio_buf);
 }
 
 static void a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param) {
     eaf_bt_esp_idf_event_t notification = EAF_BT_RELEASED;
     bool notify = false;
-    portENTER_CRITICAL(&lock);
     switch (event) {
     case ESP_A2D_SEP_REG_STATE_EVT:
+        portENTER_CRITICAL(&lock);
         state.status.ready = param->a2d_sep_reg_stat.reg_state == ESP_A2D_SEP_REG_SUCCESS;
+        portEXIT_CRITICAL(&lock);
         break;
     case ESP_A2D_CONNECTION_STATE_EVT:
-        state.status.streaming = false;
-        ++state.status.generation;
-        state.status.connected = param->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED;
-        if (!state.status.connected)
+        state.streaming = false;
+        if (param->conn_stat.state != ESP_A2D_CONNECTION_STATE_CONNECTED)
             state.configured = false;
+        if (state.ingress)
+            state.ingress->discontinuity = true;
+        portENTER_CRITICAL(&lock);
+        state.status.streaming = false;
+        state.status.connected = param->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED;
         state.status.connecting = param->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTING;
         memcpy(state.status.peer, param->conn_stat.remote_bda, sizeof(state.status.peer));
-        notification = state.status.connected ? EAF_BT_CONNECTED : EAF_BT_DISCONNECTED;
+        portEXIT_CRITICAL(&lock);
+        notification = param->conn_stat.state == ESP_A2D_CONNECTION_STATE_CONNECTED
+                           ? EAF_BT_CONNECTED
+                           : EAF_BT_DISCONNECTED;
         notify = true;
         break;
     case ESP_A2D_AUDIO_CFG_EVT:
         state.configured = state.codec->accepts(&param->audio_cfg.mcc, state.sample_rate);
+        state.streaming = false;
+        if (state.ingress)
+            state.ingress->discontinuity = true;
+        portENTER_CRITICAL(&lock);
         state.status.streaming = false;
-        ++state.status.generation;
+        portEXIT_CRITICAL(&lock);
         notification = state.configured ? EAF_BT_CONFIGURED : EAF_BT_RELEASED;
         notify = true;
         break;
-    case ESP_A2D_AUDIO_STATE_EVT:
-        state.status.streaming = state.status.connected && state.configured &&
-                                 param->audio_stat.state == ESP_A2D_AUDIO_STATE_STARTED;
-        ++state.status.generation;
-        notification = state.status.streaming ? EAF_BT_STARTED : EAF_BT_SUSPENDED;
+    case ESP_A2D_AUDIO_STATE_EVT: {
+        bool started = param->audio_stat.state == ESP_A2D_AUDIO_STATE_STARTED;
+        state.streaming = state.configured && started;
+        if (state.ingress)
+            state.ingress->discontinuity = true;
+        portENTER_CRITICAL(&lock);
+        state.status.streaming = state.streaming;
+        portEXIT_CRITICAL(&lock);
+        notification = state.streaming ? EAF_BT_STARTED : EAF_BT_SUSPENDED;
         notify = true;
         break;
+    }
     default:
         break;
     }
-    portEXIT_CRITICAL(&lock);
     if (notify)
         emit(notification);
 }
@@ -162,11 +163,6 @@ int eaf_bt_esp_idf_register(eaf_bt_ingress_t *queue, uint32_t sample_rate,
     state.codec = &eaf_bt_codec_table[0];
     state.sample_rate = sample_rate;
     state.sequence = 1u;
-    /* Publish the first generation under the lock so a consumer reading the
-     * status can never observe a generation without the ingress pointer. */
-    portENTER_CRITICAL(&lock);
-    state.status.generation = 1;
-    portEXIT_CRITICAL(&lock);
     if (esp_a2d_register_callback(&a2d_cb) != ESP_OK)
         return EAF_IO;
     if (esp_a2d_sink_init() != ESP_OK)

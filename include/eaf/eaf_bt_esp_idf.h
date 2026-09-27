@@ -23,14 +23,12 @@ typedef void (*eaf_bt_esp_idf_notify_t)(void *ctx, eaf_bt_esp_idf_event_t event)
 int eaf_bt_esp_idf_register(eaf_bt_ingress_t *queue, uint32_t sample_rate,
                             eaf_bt_esp_idf_notify_t notify, void *ctx);
 
+/* Lossless snapshot for the application's control/worker tasks. `streaming` is
+ * true only between A2DP START and SUSPEND when a codec is configured. Media
+ * is delivered only while streaming; on every state change the binding marks
+ * the next ingress packet discontinuous so the decoder resets its history. */
 typedef struct {
-    uint32_t generation;
     uint8_t peer[6];
     bool ready, connected, connecting, streaming;
 } eaf_bt_esp_idf_status_t;
 void eaf_bt_esp_idf_status(eaf_bt_esp_idf_status_t *status);
-/* Only the ingress consumer/audio owner calls sync, between decode steps.
- * On a new generation it purges ingress under the producer lock and acknowledges
- * the stream. The caller MUST reset decoder/reservoir before decoding again.
- * Radio callbacks gate media until this acknowledgment; no reset races a copy. */
-bool eaf_bt_esp_idf_sync(eaf_bt_esp_idf_status_t *status);

@@ -55,7 +55,7 @@ static esp_avrc_rn_evt_cap_mask_t capabilities;
 static uint8_t last_peer[6];
 static bool have_peer, automatic = true, attempting, cancelling, forgetting;
 static unsigned attempts;
-static int64_t pair_until, retry_at, attempt_until, metadata_at, save_at;
+static int64_t pair_until, retry_at, attempt_until, save_at;
 static nvs_handle_t settings;
 static bool settings_open, settings_dirty;
 
@@ -231,7 +231,6 @@ static void request_track(void) {
           esp_avrc_ct_send_metadata_cmd(1, ESP_AVRC_MD_ATTR_TITLE | ESP_AVRC_MD_ATTR_ARTIST |
                                                ESP_AVRC_MD_ATTR_ALBUM));
     check("play status", esp_avrc_ct_send_get_play_status_cmd(5));
-    metadata_at = now_ms() + 5000;
 }
 
 static void subscribe(esp_avrc_rn_event_ids_t event, uint8_t label) {
@@ -508,8 +507,6 @@ static void tick(void) {
             ESP_LOGI(TAG, "reconnect attempt %u/5", attempts);
         }
     }
-    if (ct_connected && now >= metadata_at)
-        request_track();
     if (settings_dirty && now >= save_at)
         save_settings();
     if (atomic_exchange(&overflow, false)) {
