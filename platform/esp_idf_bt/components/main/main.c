@@ -26,6 +26,7 @@
 #include <string.h>
 
 static const char *TAG = "eaf_bt";
+#define EAF_OUTPUT_RETRY_MS 10u
 
 static eaf_bt_ingress_t ingress;
 static eaf_bt_decoder_t decoder;
@@ -35,11 +36,27 @@ static eaf_sbc_oi_t sbc;
 static eaf_sbc_decoder_t sbc_decoder;
 static eaf_thread_t decode_thread;
 static eaf_thread_t output_thread;
+static TaskHandle_t decode_task, output_task;
+
+static void wake_decode(void) {
+    if (decode_task)
+        (void)xTaskNotifyGive(decode_task);
+}
+
+static void wake_output(void) {
+    if (output_task)
+        (void)xTaskNotifyGive(output_task);
+}
+
+static void reservoir_space(void *ctx) {
+    (void)ctx;
+    wake_decode();
+}
 
 static void on_event(void *ctx, eaf_bt_esp_idf_event_t event) {
     (void)ctx;
     (void)event;
-    /* Workers poll the binding's status snapshot. */
+    wake_decode();
 }
 
 /* Decoder producer: drains the blocking ingress into the reservoir. It runs at
@@ -48,32 +65,45 @@ static void on_event(void *ctx, eaf_bt_esp_idf_event_t event) {
  * Bluedroid's bursty media delivery. */
 static void decode_entry(void *arg) {
     (void)arg;
+    decode_task = xTaskGetCurrentTaskHandle();
     bool was_connected = false;
     for (;;) {
+        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         eaf_bt_esp_idf_status_t status;
         eaf_bt_esp_idf_status(&status);
         if (was_connected && !status.connected)
             (void)eaf_bt_decoder_reset(&decoder);
         was_connected = status.connected;
-        if (status.streaming) {
+        if (!status.streaming)
+            continue;
+        for (;;) {
+            uint32_t before = eaf_reservoir_level(&reservoir);
             int rc = eaf_bt_decoder_step(&decoder);
-            if (rc != EAF_OK)
+            if (rc != EAF_OK) {
                 ESP_LOGW(TAG, "SBC decode error=%d", rc);
+                break;
+            }
+            if (eaf_reservoir_level(&reservoir) != before)
+                wake_output();
+            /* Stop when the reservoir is full or the ingress has no more work. */
+            if (eaf_reservoir_backpressure(&reservoir) || eaf_reservoir_level(&reservoir) == before)
+                break;
         }
-        vTaskDelay(1);
     }
 }
 
 /* Output consumer: owns the reservoir read cursor and the I2S sink. Applying
- * gain here keeps volume changes off the Bluetooth callback task. */
+ * gain here keeps volume changes off the Bluetooth callback task. The blocking
+ * DMA write paces the loop; the notification only shortens error recovery. */
 static void output_entry(void *arg) {
     (void)arg;
+    output_task = xTaskGetCurrentTaskHandle();
     eaf_sink_t *sink = &eaf_esp_idf_i2s_sink;
     eaf_bt_volume_t gain = {0};
     for (;;) {
         eaf_buffer_t *buffer = NULL;
         if (sink->ops->acquire_buf(sink, &buffer) != EAF_OK) {
-            vTaskDelay(1);
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(EAF_OUTPUT_RETRY_MS));
             continue;
         }
         if (eaf_reservoir_pull(&reservoir, buffer) != EAF_OK)
@@ -84,7 +114,7 @@ static void output_entry(void *arg) {
         int rc = sink->ops->commit_buf(sink, buffer);
         if (rc != EAF_OK) {
             ESP_LOGW(TAG, "i2s commit: %d", rc);
-            vTaskDelay(1);
+            ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(EAF_OUTPUT_RETRY_MS));
         }
     }
 }
@@ -123,6 +153,8 @@ static int start_audio(void) {
     if (eaf_reservoir_init(&reservoir, reservoir_storage, CONFIG_EAF_BT_RESERVOIR_FRAMES, format,
                            CONFIG_EAF_BT_RESERVOIR_FRAMES / 2u) != EAF_OK)
         return EAF_IO;
+    reservoir.wake_producer = reservoir_space;
+    reservoir.wake_ctx = NULL;
     if (eaf_bt_decoder_init(&decoder, &ingress, &reservoir, &sbc_decoder) != EAF_OK)
         return EAF_IO;
 

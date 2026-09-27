@@ -23,7 +23,8 @@ typedef struct {
  * full and unmuted every boot; only the last peer is persisted. */
 int speaker_start(void);
 /* Nonblocking command enqueue. EAF_OK means accepted, not completed.
- * Volume uses AVRCP units 0..127; mute uses 0/1. Pair lasts 120 seconds.
+ * Volume uses AVRCP units 0..127; mute uses 0/1. Pair and Reconnect drop any
+ * current link and remain discoverable whenever idle; there is no timeout.
  * Forget disconnects, removes all bonds and the remembered peer, then pairs. */
 int speaker_command(speaker_command_t command, unsigned value);
 void speaker_get_status(speaker_status_t *status);

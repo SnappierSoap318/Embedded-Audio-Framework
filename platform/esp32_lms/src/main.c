@@ -1,6 +1,7 @@
 #include "board_runtime.h"
 #include "diagnostics.h"
 #include "output.h"
+#include "wifi_bootstrap.h"
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
@@ -14,76 +15,18 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT), "Qualify Wi-Fi alone before enabling Blueto
 BUILD_ASSERT(!IS_ENABLED(CONFIG_EAF_BOARD_USE_PSRAM) || IS_ENABLED(CONFIG_ESP_SPIRAM),
              "PSRAM reservoir requires CONFIG_ESP_SPIRAM");
 static eaf_lms_client_t client;
-static struct net_if *iface;
-static struct net_mgmt_event_callback events;
-static atomic_bool associated;
-static struct wifi_connect_req_params connection;
-static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event,
-                       struct net_if *event_iface) {
-    if (event_iface != iface)
-        return;
-    if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
-        atomic_store(&associated, false);
-        board_log("Wi-Fi disconnected");
-    }
-    if (event == NET_EVENT_WIFI_CONNECT_RESULT && cb->info &&
-        cb->info_length >= sizeof(struct wifi_status)) {
-        const struct wifi_status *status = cb->info;
-        atomic_store(&associated, status->status == 0);
-        board_log("Wi-Fi association result: %d", status->status);
-    }
-}
-static bool online(void) {
-    return atomic_load(&associated) &&
-           net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED) != NULL;
-}
-static int connect_wifi(void) {
-    atomic_store(&associated, false);
-    net_dhcpv4_start(iface);
-    int rc = net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connection, sizeof(connection));
-    if (rc)
-        return rc;
-    int64_t deadline = k_uptime_get() + 30000;
-    while (!online() && k_uptime_get() < deadline)
-        k_sleep(K_MSEC(100));
-    if (!online()) {
-        board_log("Wi-Fi timeout: associated=%u, IPv4=%u", atomic_load(&associated) ? 1u : 0u,
-                  net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED) ? 1u : 0u);
-        return EAF_TIMEOUT;
-    }
-    char address[NET_IPV4_ADDR_LEN];
-    struct in_addr *ip = net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
-    if (!ip)
-        return EAF_IO;
-    board_log("Wi-Fi IPv4: %s", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
-    board_wifi_power_save_off();
-    return EAF_OK;
-}
-static void wifi_health(void) {
-    struct wifi_iface_status status;
-    if (!net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status, sizeof(status)))
-        board_log_memory("Wi-Fi rssi=%d dtim=%u beacon=%u", status.rssi,
-                         (unsigned)status.dtim_period, (unsigned)status.beacon_interval);
-}
+static board_wifi_t wifi;
+
 int main(void) {
     if (CONFIG_EAF_BOARD_MAIN_CPU >= 0)
         (void)board_cpu_pin(k_current_get(), CONFIG_EAF_BOARD_MAIN_CPU);
     board_diagnostics_start();
-    const char *ssid = board_wifi_ssid(), *password = board_wifi_password();
-    size_t ssid_length = strlen(ssid), password_length = strlen(password);
-    if (!ssid_length || ssid_length > 32 || password_length < 8 || password_length > 63) {
-        board_log("Set a 2.4 GHz WPA2 SSID/passphrase in credentials.local.h and rebuild");
+    if (board_wifi_bind(&wifi) != EAF_OK)
         return 1;
-    }
-    iface = net_if_get_first_wifi();
-    if (!iface) {
-        board_log("No Wi-Fi interface");
-        return 1;
-    }
     struct in_addr server;
     if (net_addr_pton(AF_INET, CONFIG_EAF_BOARD_SERVER, &server))
         return 1;
-    const struct net_linkaddr *link = net_if_get_link_addr(iface);
+    const struct net_linkaddr *link = net_if_get_link_addr(wifi.iface);
     if (!link || link->len != 6)
         return 1;
     uint8_t mac[6];
@@ -95,22 +38,10 @@ int main(void) {
     eaf_lms_callbacks_t cb = board_output_callbacks();
     if (eaf_lms_client_init(&client, &cb))
         return 1;
-    net_mgmt_init_event_callback(&events, wifi_event,
-                                 NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT);
-    net_mgmt_add_event_callback(&events);
-    connection = (struct wifi_connect_req_params){.ssid = (const uint8_t *)ssid,
-                                                  .ssid_length = (uint8_t)ssid_length,
-                                                  .psk = (const uint8_t *)password,
-                                                  .psk_length = (uint8_t)password_length,
-                                                  .security = WIFI_SECURITY_TYPE_PSK,
-                                                  .channel = WIFI_CHANNEL_ANY,
-                                                  .band = WIFI_FREQ_BAND_2_4_GHZ,
-                                                  .bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ,
-                                                  .timeout = 20};
     board_log("EAF LMS board: player %02x:%02x:%02x:%02x:%02x:%02x, server %s:3483", mac[0], mac[1],
               mac[2], mac[3], mac[4], mac[5], CONFIG_EAF_BOARD_SERVER);
     for (;;) {
-        int rc = online() ? EAF_OK : connect_wifi();
+        int rc = board_wifi_online(&wifi) ? EAF_OK : board_wifi_connect(&wifi);
         if (!rc) {
             rc = eaf_lms_client_connect(&client, sys_be32_to_cpu(server.s_addr), 3483, mac);
             if (rc)
@@ -121,7 +52,7 @@ int main(void) {
         int64_t report = 0, diagnostic = 0, previous_diagnostic = k_uptime_get();
         uint64_t previous_bytes = client.diagnostics.http_bytes;
         bool eof_reported = false;
-        while (!rc && online() && !board_output_failed()) {
+        while (!rc && board_wifi_online(&wifi) && !board_output_failed()) {
             eaf_lms_pump_result_t pump;
             rc = eaf_lms_client_pump(&client, 32, 1000, &pump);
             if (rc) {
@@ -149,7 +80,7 @@ int main(void) {
                                  board_output_flags(), board_output_process_calls(),
                                  client.http.open ? 1u : 0u, client.input_eof ? 1u : 0u,
                                  client.wait_cont ? 1u : 0u, client.wait_start ? 1u : 0u);
-                wifi_health();
+                board_wifi_health(&wifi);
                 previous_bytes = d->http_bytes;
                 previous_diagnostic = now;
                 diagnostic = now + 5000;
@@ -181,9 +112,9 @@ int main(void) {
             return 1;
         }
         board_log("Connection ended (%d); retry in 5 seconds", rc);
-        if (!online()) {
-            (void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-            net_dhcpv4_stop(iface);
+        if (!board_wifi_online(&wifi)) {
+            (void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, wifi.iface, NULL, 0);
+            net_dhcpv4_stop(wifi.iface);
         }
         k_sleep(K_SECONDS(5));
     }

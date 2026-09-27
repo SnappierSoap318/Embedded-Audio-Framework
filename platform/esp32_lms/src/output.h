@@ -11,6 +11,3 @@ uint32_t board_output_process_calls(void);
 /* Transport-thread snapshot: active=1, released=2, pause request=4, ack=8, done=16. */
 uint32_t board_output_flags(void);
 bool board_output_snapshot(eaf_lms_playback_t *snapshot);
-
-const char *board_wifi_ssid(void);
-const char *board_wifi_password(void);

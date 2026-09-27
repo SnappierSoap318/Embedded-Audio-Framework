@@ -153,6 +153,14 @@ static void a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param) {
         emit(notification);
 }
 
+int eaf_bt_esp_idf_disconnect(void) {
+    eaf_bt_esp_idf_status_t status;
+    eaf_bt_esp_idf_status(&status);
+    if (!status.connected && !status.connecting)
+        return EAF_STATE;
+    return esp_a2d_sink_disconnect(status.peer) == ESP_OK ? EAF_OK : EAF_IO;
+}
+
 int eaf_bt_esp_idf_register(eaf_bt_ingress_t *queue, uint32_t sample_rate,
                             eaf_bt_esp_idf_notify_t notify, void *ctx) {
     if (!queue || !notify || (sample_rate != 44100u && sample_rate != 48000u))

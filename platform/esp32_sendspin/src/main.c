@@ -1,8 +1,8 @@
-#include "board_config.h"
 #include "board_runtime.h"
 #include "diagnostics.h"
 #include "ota.h"
 #include "tas5805m.h"
+#include "wifi_bootstrap.h"
 #include <board_output.h>
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_sendspin_client.h>
@@ -22,10 +22,8 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_BT), "Qualify Wi-Fi alone before enabling Blueto
 
 static eaf_sendspin_client_t client;
 static eaf_sendspin_player_t player;
-static struct net_if *iface;
-static struct net_mgmt_event_callback events;
-static atomic_bool associated;
-static struct wifi_connect_req_params connection;
+static const tas5805m_io_t *board_amp;
+static board_wifi_t wifi;
 static atomic_t chunks;
 
 static void sendspin_output_log(const char *message) {
@@ -61,7 +59,8 @@ static void start_output(const eaf_sendspin_stream_start_t *start) {
     } else {
         have_stream = true;
         apply_volume();
-        (void)tas5805m_play();
+        if (board_amp)
+            (void)tas5805m_play(board_amp);
         board_log("Stream: %u Hz %u-bit %u ch\n", start->sample_rate, start->bit_depth,
                   start->channels);
     }
@@ -128,65 +127,10 @@ static void on_disconnect(void *ctx) {
     board_log("Sendspin disconnected\n");
 }
 
-static void wifi_event(struct net_mgmt_event_callback *cb, uint64_t event,
-                       struct net_if *event_iface) {
-    if (event_iface != iface)
-        return;
-    if (event == NET_EVENT_WIFI_DISCONNECT_RESULT) {
-        atomic_store(&associated, false);
-        board_log("Wi-Fi disconnected\n");
-    }
-    if (event == NET_EVENT_WIFI_CONNECT_RESULT && cb->info &&
-        cb->info_length >= sizeof(struct wifi_status)) {
-        const struct wifi_status *status = cb->info;
-        atomic_store(&associated, status->status == 0);
-        board_log("Wi-Fi association result: %d\n", status->status);
-    }
-}
-static bool online(void) {
-    return atomic_load(&associated) &&
-           net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED) != NULL;
-}
-static void wifi_health(void) {
-    struct wifi_iface_status status;
-    if (!net_mgmt(NET_REQUEST_WIFI_IFACE_STATUS, iface, &status, sizeof(status)))
-        board_log("Wi-Fi rssi=%d dtim=%u\n", status.rssi, (unsigned)status.dtim_period);
-}
-static int connect_wifi(void) {
-    atomic_store(&associated, false);
-    net_dhcpv4_start(iface);
-    int rc = net_mgmt(NET_REQUEST_WIFI_CONNECT, iface, &connection, sizeof(connection));
-    if (rc)
-        return rc;
-    int64_t deadline = k_uptime_get() + 30000;
-    while (!online() && k_uptime_get() < deadline)
-        k_sleep(K_MSEC(100));
-    if (!online()) {
-        board_log("Wi-Fi timeout\n");
-        return EAF_TIMEOUT;
-    }
-    char address[NET_IPV4_ADDR_LEN];
-    struct in_addr *ip = net_if_ipv4_get_global_addr(iface, NET_ADDR_PREFERRED);
-    if (!ip)
-        return EAF_IO;
-    board_log("Wi-Fi IPv4: %s\n", net_addr_ntop(AF_INET, ip, address, sizeof(address)));
-    board_wifi_power_save_off();
-    return EAF_OK;
-}
-
 int main(void) {
     board_diagnostics_start();
-    const char *ssid = board_wifi_ssid(), *password = board_wifi_password();
-    size_t ssid_length = strlen(ssid), password_length = strlen(password);
-    if (!ssid_length || ssid_length > 32 || password_length < 8 || password_length > 63) {
-        board_log("Set a 2.4 GHz WPA2 SSID/passphrase in credentials.local.h and rebuild\n");
+    if (board_wifi_bind(&wifi) != EAF_OK)
         return 1;
-    }
-    iface = net_if_get_first_wifi();
-    if (!iface) {
-        board_log("No Wi-Fi interface\n");
-        return 1;
-    }
     struct in_addr server;
     if (!strlen(CONFIG_EAF_BOARD_SERVER) ||
         net_addr_pton(AF_INET, CONFIG_EAF_BOARD_SERVER, &server)) {
@@ -208,7 +152,8 @@ int main(void) {
         board_log("Output initialization failed\n");
         return 1;
     }
-    (void)tas5805m_bringup();
+    board_amp = tas5805m_board_io();
+    (void)tas5805m_bringup(board_amp);
     eaf_sendspin_player_init(&player, board_write, NULL);
 
     uint32_t capacity = eaf_board_output_capacity_frames();
@@ -240,22 +185,9 @@ int main(void) {
                                           .disconnected = on_disconnect};
     eaf_sendspin_client_init(&client, &config, &callbacks, NULL);
 
-    net_mgmt_init_event_callback(&events, wifi_event,
-                                 NET_EVENT_WIFI_CONNECT_RESULT | NET_EVENT_WIFI_DISCONNECT_RESULT);
-    net_mgmt_add_event_callback(&events);
-    connection = (struct wifi_connect_req_params){.ssid = (const uint8_t *)ssid,
-                                                  .ssid_length = (uint8_t)ssid_length,
-                                                  .psk = (const uint8_t *)password,
-                                                  .psk_length = (uint8_t)password_length,
-                                                  .security = WIFI_SECURITY_TYPE_PSK,
-                                                  .channel = WIFI_CHANNEL_ANY,
-                                                  .band = WIFI_FREQ_BAND_2_4_GHZ,
-                                                  .bandwidth = WIFI_FREQ_BANDWIDTH_20MHZ,
-                                                  .timeout = 20};
-
     board_log("EAF Sendspin board: server %s:%d\n", CONFIG_EAF_BOARD_SERVER, CONFIG_EAF_BOARD_PORT);
     for (;;) {
-        int rc = online() ? EAF_OK : connect_wifi();
+        int rc = board_wifi_online(&wifi) ? EAF_OK : board_wifi_connect(&wifi);
         if (!rc)
             rc = eaf_sendspin_client_connect(&client, sys_be32_to_cpu(server.s_addr),
                                              (uint16_t)CONFIG_EAF_BOARD_PORT, 3000);
@@ -268,7 +200,7 @@ int main(void) {
         int64_t report = 0;
         uint64_t previous_rx = client.rx_total;
         int64_t previous_ms = k_uptime_get();
-        while (!rc && online() && !eaf_board_output_failed()) {
+        while (!rc && board_wifi_online(&wifi) && !eaf_board_output_failed()) {
             /* Drain the socket greedily so the server's TCP window stays open. */
             uint64_t before = client.rx_total;
             for (unsigned i = 0; i < 8 && !rc; ++i) {
@@ -289,8 +221,8 @@ int main(void) {
                           (int)player.synchronized, (long long)(player.last_latency_us / 1000),
                           eaf_board_output_level(), eaf_board_output_flags(),
                           (unsigned long long)rate, volume_level, (int)volume_muted,
-                          (int)player.rate_ppm, (int)tas5805m_fault());
-                wifi_health();
+                          (int)player.rate_ppm, board_amp ? (int)tas5805m_fault(board_amp) : 0);
+                board_wifi_health(&wifi);
                 previous_rx = client.rx_total;
                 previous_ms = now;
                 report = now + 5000;
@@ -309,9 +241,9 @@ int main(void) {
             board_log("Output failure: playback stopped\n");
             return 1;
         }
-        if (!online()) {
-            (void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, iface, NULL, 0);
-            net_dhcpv4_stop(iface);
+        if (!board_wifi_online(&wifi)) {
+            (void)net_mgmt(NET_REQUEST_WIFI_DISCONNECT, wifi.iface, NULL, 0);
+            net_dhcpv4_stop(wifi.iface);
         }
         k_sleep(K_SECONDS(3));
     }
