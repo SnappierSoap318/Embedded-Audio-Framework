@@ -15,11 +15,14 @@ initialization mode), with a second serial reader splitting the byte stream. The
 UART output still becomes garbled once I2S runs, so quantitative stream/decode
 diagnostics (underrun count, decode errors) are not yet available from the log.
 
-Not yet validated on hardware: AVRCP volume/mute, track metadata, reconnect/
-pairing-window management, forget/remove-bond, and stream-boundary handling.
-Host coverage for the portable pieces: `bt_controls` checks the squared-
-amplitude mute ramp and the decoder stream-boundary reset; the full host suite is
-34/34 with `check_code.py` at 70 translation units, 0 failed.
+After the controls pass, the user confirmed the device connects and responds to
+volume but was silent; a follow-up correction restored clear audible playback
+(user-confirmed). The remaining controls (track metadata, reconnect/pairing
+window, forget/remove-bond, smoothness under the two-worker split) are not yet
+hardware-validated. Host coverage: `bt_controls` checks the squared-amplitude
+mute ramp and the decoder stream-boundary reset, and `bt_binding` drives the
+A2DP binding's state machine; the full host suite is 35/35 with `check_code.py`
+at 71 translation units, 0 failed.
 
 A first controls pass merged decoding into the I2S output worker and stuttered on
 hardware (user report): decoding on the output thread delayed each blocking I2S
@@ -30,8 +33,8 @@ A later build booted silent on hardware while A2DP/AVRCP connected and responded
 Code review plus the new `bt_binding` host test localised it to two control-pass
 choices, both removed: streaming/decoding were gated on the codec-config check
 (so a rejected config muted a decodable stream), and volume/mute were restored
-from NVS (so a stored 0/muted booted silent). Neither the stutter nor the silence
-fix is hardware-confirmed yet.
+from NVS (so a stored 0/muted booted silent). With both removed, audible playback
+is user-confirmed; the two-worker smoothness is not separately re-measured.
 
 ## P0: native LMS startup ownership
 
