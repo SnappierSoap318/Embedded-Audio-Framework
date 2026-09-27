@@ -3,11 +3,13 @@
  * Board application scaffold. It owns Bluedroid/controller bring-up, the GAP
  * name and discoverability, the portable SBC decode worker and the output
  * owner that drains the jitter reservoir into the ESP-IDF I2S sink. Source
- * arbitration, volume/mute and pause are later T08 work. */
+ * arbitration with other sources remains separate work. */
 #include "amp.h"
+#include "speaker.h"
 #include <eaf/eaf_bt.h>
 #include <eaf/eaf_bt_decoder.h>
 #include <eaf/eaf_bt_esp_idf.h>
+#include <eaf/eaf_bt_volume.h>
 #include <eaf/eaf_hal.h>
 #include <eaf/eaf_sbc_oi.h>
 #include <eaf_sink_i2s_esp_idf.h>
@@ -31,85 +33,77 @@ static eaf_reservoir_t reservoir;
 static int32_t reservoir_storage[CONFIG_EAF_BT_RESERVOIR_FRAMES * 2];
 static eaf_sbc_oi_t sbc;
 static eaf_sbc_decoder_t sbc_decoder;
-static eaf_thread_t decode_thread;
 static eaf_thread_t output_thread;
-
-static void gap_event(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
-    switch (event) {
-    case ESP_BT_GAP_CFM_REQ_EVT: {
-        /* This speaker has no display or keyboard; use SSP Just Works. */
-        esp_err_t err = esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true);
-        if (err != ESP_OK)
-            ESP_LOGE(TAG, "pairing confirmation failed: %s", esp_err_to_name(err));
-        break;
-    }
-    case ESP_BT_GAP_AUTH_CMPL_EVT:
-        if (param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS)
-            ESP_LOGI(TAG, "pairing authenticated");
-        else
-            ESP_LOGE(TAG, "pairing authentication failed: status=0x%x", param->auth_cmpl.stat);
-        break;
-    case ESP_BT_GAP_ACL_CONN_CMPL_STAT_EVT:
-        ESP_LOGI(TAG, "ACL connection status=0x%x", param->acl_conn_cmpl_stat.stat);
-        break;
-    case ESP_BT_GAP_ACL_DISCONN_CMPL_STAT_EVT:
-        ESP_LOGI(TAG, "ACL disconnected: reason=0x%x", param->acl_disconn_cmpl_stat.reason);
-        break;
-    default:
-        break;
-    }
-}
 
 static void on_event(void *ctx, eaf_bt_esp_idf_event_t event) {
     (void)ctx;
-    switch (event) {
-    case EAF_BT_CONNECTED:
-        ESP_LOGI(TAG, "source connected");
-        break;
-    case EAF_BT_DISCONNECTED:
-        ESP_LOGI(TAG, "source disconnected");
-        break;
-    case EAF_BT_CONFIGURED:
-        ESP_LOGI(TAG, "stream configured");
-        break;
-    case EAF_BT_STARTED:
-        ESP_LOGI(TAG, "stream started");
-        break;
-    case EAF_BT_SUSPENDED:
-        ESP_LOGI(TAG, "stream suspended");
-        break;
-    case EAF_BT_RELEASED:
-        break;
-    }
-}
-
-static void decode_entry(void *arg) {
-    (void)arg;
-    for (;;) {
-        int rc = eaf_bt_decoder_step(&decoder);
-        if (rc != EAF_OK)
-            ESP_LOGW(TAG, "sbc decode step: %d", rc);
-        vTaskDelay(1);
-    }
+    (void)event;
+    /* Workers poll the binding's lossless generation/status snapshot. */
 }
 
 static void output_entry(void *arg) {
     (void)arg;
     eaf_sink_t *sink = &eaf_esp_idf_i2s_sink;
+    eaf_bt_esp_idf_status_t stream = {0};
+    eaf_bt_volume_t gain = {0};
+    unsigned errors = 0, sink_failures = 0;
+    /* Restarting the sink and dropping queued audio is the recovery for both a
+     * stream boundary and a transient I2S write failure; bounded so a hardware
+     * fault still stops instead of looping. */
     for (;;) {
+        /* One worker owns BOTH reservoir cursors and decoder state. No reset
+         * races the output reader. sync purges ingress with its producer gated. */
+        if (eaf_bt_esp_idf_sync(&stream)) {
+            if (sink->ops->stop(sink) != EAF_OK || sink->ops->start(sink) != EAF_OK)
+                break;
+            eaf_reservoir_reset(&reservoir);
+            if (eaf_bt_decoder_reset(&decoder) != EAF_OK)
+                break;
+            gain = (eaf_bt_volume_t){0};
+        }
+        if (stream.streaming) {
+            /* Bounded catch-up; each step decodes at most 128 frames. */
+            for (unsigned i = 0; i < 16 && !eaf_reservoir_backpressure(&reservoir); ++i) {
+                int rc = eaf_bt_decoder_step(&decoder);
+                if (rc != EAF_OK && (++errors & 127u) == 1u)
+                    ESP_LOGW(TAG, "SBC decode error=%d total=%u", rc, errors);
+            }
+        }
         eaf_buffer_t *buffer = NULL;
         if (sink->ops->acquire_buf(sink, &buffer) != EAF_OK) {
+            if (++sink_failures > 8)
+                break;
             vTaskDelay(1);
             continue;
         }
-        if (eaf_reservoir_pull(&reservoir, buffer) != EAF_OK) {
+        if (eaf_reservoir_pull(&reservoir, buffer) != EAF_OK)
+            break;
+        eaf_bt_esp_idf_status_t latest;
+        eaf_bt_esp_idf_status(&latest);
+        if (!latest.streaming || latest.generation != stream.generation)
+            memset(buffer->samples, 0, buffer->frame_count * 2u * sizeof(int32_t));
+        unsigned level = speaker_audio_level();
+        eaf_bt_volume_apply(&gain, buffer->samples, buffer->frame_count, (uint8_t)(level & 127u),
+                            (level & 128u) != 0);
+        if (sink->ops->commit_buf(sink, buffer) != EAF_OK) {
+            /* A failed write leaves the sink holding the block, so drain and
+             * restart before retrying; a persistent fault ends the worker. */
+            if (sink->ops->stop(sink) != EAF_OK || sink->ops->start(sink) != EAF_OK)
+                break;
+            eaf_reservoir_reset(&reservoir);
+            if (eaf_bt_decoder_reset(&decoder) != EAF_OK)
+                break;
+            gain = (eaf_bt_volume_t){0};
+            if (++sink_failures > 8)
+                break;
             vTaskDelay(1);
             continue;
         }
-        int rc = sink->ops->commit_buf(sink, buffer);
-        if (rc != EAF_OK)
-            ESP_LOGW(TAG, "i2s commit: %d", rc);
+        sink_failures = 0;
+        /* The blocking I2S write paces this worker even while output is silent. */
     }
+    ESP_LOGE(TAG, "audio owner stopped after sink/decoder failure");
+    (void)sink->ops->stop(sink);
 }
 
 static int start_audio(void) {
@@ -149,11 +143,7 @@ static int start_audio(void) {
     if (eaf_bt_decoder_init(&decoder, &ingress, &reservoir, &sbc_decoder) != EAF_OK)
         return EAF_IO;
 
-    const eaf_thread_options_t decoder_options = {EAF_THREAD_DECODER, -1, false};
     const eaf_thread_options_t audio_options = {EAF_THREAD_AUDIO, -1, false};
-    if (hal_thread_create_with_options(&decode_thread, decode_entry, NULL, &decoder_options) !=
-        EAF_OK)
-        return EAF_IO;
     if (hal_thread_create_with_options(&output_thread, output_entry, NULL, &audio_options) !=
         EAF_OK)
         return EAF_IO;
@@ -176,16 +166,10 @@ static int start_bluetooth(void) {
     ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT));
     ESP_ERROR_CHECK(esp_bluedroid_init());
     ESP_ERROR_CHECK(esp_bluedroid_enable());
-    ESP_ERROR_CHECK(esp_bt_gap_register_callback(gap_event));
-    esp_bt_io_cap_t io_cap = ESP_BT_IO_CAP_NONE;
-    ESP_ERROR_CHECK(esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE, &io_cap, sizeof(io_cap)));
-    /* Legacy peers that do not support SSP use the speaker PIN 0000. */
-    esp_bt_pin_code_t pin = {'0', '0', '0', '0'};
-    ESP_ERROR_CHECK(esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_FIXED, 4, pin));
-    ESP_ERROR_CHECK(esp_bt_gap_set_device_name(CONFIG_EAF_BT_DEVICE_NAME));
+    if (speaker_start() != EAF_OK)
+        return EAF_IO;
     if (eaf_bt_esp_idf_register(&ingress, CONFIG_EAF_BT_SAMPLE_RATE, on_event, NULL) != EAF_OK)
         return EAF_IO;
-    ESP_ERROR_CHECK(esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_GENERAL_DISCOVERABLE));
     return EAF_OK;
 }
 
