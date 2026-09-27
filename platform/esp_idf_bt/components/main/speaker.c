@@ -126,8 +126,9 @@ static void refresh_bonds(void) {
 static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
     switch (event) {
     case ESP_BT_GAP_CFM_REQ_EVT:
-        check("confirm pairing", esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda,
-                                                              pairing_allowed(param->cfm_req.bda)));
+        /* NoInputNoOutput has no display to compare; a headless speaker always
+         * accepts Just Works so a source never has to type a code. */
+        check("confirm pairing", esp_bt_gap_ssp_confirm_reply(param->cfm_req.bda, true));
         break;
     case ESP_BT_GAP_PIN_REQ_EVT: {
         esp_bt_pin_code_t pin = {'0', '0', '0', '0'};
@@ -533,9 +534,17 @@ int speaker_start(void) {
     esp_bt_io_cap_t capability = ESP_BT_IO_CAP_NONE;
     ESP_ERROR_CHECK(
         esp_bt_gap_set_security_param(ESP_BT_SP_IOCAP_MODE, &capability, sizeof(capability)));
-    esp_bt_pin_code_t pin = {0};
-    ESP_ERROR_CHECK(esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_VARIABLE, 0, pin));
+    /* Legacy peers that cannot do SSP get the deterministic speaker PIN 0000. */
+    esp_bt_pin_code_t pin = {'0', '0', '0', '0'};
+    ESP_ERROR_CHECK(esp_bt_gap_set_pin(ESP_BT_PIN_TYPE_FIXED, 4, pin));
     ESP_ERROR_CHECK(esp_bt_gap_set_device_name(CONFIG_EAF_BT_DEVICE_NAME));
+    /* Advertise as a headless Audio/Video loudspeaker: major Audio/Video,
+     * minor loudspeaker (5), with the Audio and Rendering service bits. */
+    esp_bt_cod_t cod = {0};
+    cod.major = ESP_BT_COD_MAJOR_DEV_AV;
+    cod.minor = 0x05;
+    cod.service = ESP_BT_COD_SRVC_AUDIO | ESP_BT_COD_SRVC_RENDERING;
+    check("class of device", esp_bt_gap_set_cod(cod, ESP_BT_SET_COD_ALL));
     ESP_ERROR_CHECK(esp_avrc_ct_register_callback(ct_cb));
     ESP_ERROR_CHECK(esp_avrc_ct_init());
     ESP_ERROR_CHECK(esp_avrc_tg_register_callback(tg_cb));

@@ -126,9 +126,13 @@ made from application context. It provides:
   the window re-opens indefinitely. If the remembered peer rejects our link key —
   it unpaired on its side — the stale bond is removed and the speaker becomes
   discoverable immediately, so a forgotten pairing cannot leave it invisible.
-- **Pairing management.** A 120-second pairing window uses SSP Just Works (IO
-  capability none). `forget` disconnects, removes all bonds and the remembered
-  peer, then reopens pairing.
+- **Headless pairing.** The device advertises a Class of Device of Audio/Video,
+  minor loudspeaker, with the Audio and Rendering service bits, and uses SSP
+  Just Works with IO capability `NoInputNoOutput`. The confirmation reply is
+  accepted unconditionally (there is no display to compare a passkey), and
+  legacy peers get a fixed PIN `0000`, so a source never has to type a code on
+  the speaker. A 120-second pairing window governs new pairings; `forget`
+  disconnects, removes all bonds and the remembered peer, then reopens pairing.
 - **Stream lifecycle.** Two workers preserve the original producer/consumer
   split: a decoder producer drains the blocking ingress into the reservoir, and
   the audio owner drains the reservoir into I2S. Every A2DP state change marks
