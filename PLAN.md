@@ -49,10 +49,11 @@ The existing Q1.31 DSP and 32-bit I2S slots do not imply 32-bit source precision
    starting I2S clocks; the user confirmed clear audible phone playback. A first
    feature pass adds AVRCP volume/mute, track metadata, reconnect/pairing-window
    management, forget/remove-bond and discontinuity-based stream-boundary
-   handling, with a host test for the portable ramp/reset pieces. Decoding stays
-   on its own worker so it never delays the I2S output. Next: source arbitration
-   and Wi-Fi/BT coexistence; the new controls need hardware testing. AAC/LDAC
-   remain unimplemented.
+   handling, with host tests for the ramp/reset pieces and the A2DP state machine.
+   Decoding stays on its own worker so it never delays the I2S output. Hardware
+   now confirms smooth playback with working volume and mute; track metadata and
+   the connection-management paths still need hardware checks. Next: source
+   arbitration and Wi-Fi/BT coexistence. AAC/LDAC remain unimplemented.
 4. **Clock synchronization:** define PTS and clock domains, presentation scheduling,
    bounded PI control, ASRC/hardware-PLL backends and +/-100 ppm tests. Required
    before claiming LMS multi-room accuracy.

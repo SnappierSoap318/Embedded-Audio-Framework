@@ -16,13 +16,15 @@ UART output still becomes garbled once I2S runs, so quantitative stream/decode
 diagnostics (underrun count, decode errors) are not yet available from the log.
 
 After the controls pass, the user confirmed the device connects and responds to
-volume but was silent; a follow-up correction restored clear audible playback
-(user-confirmed). The remaining controls (track metadata, reconnect/pairing
-window, forget/remove-bond, smoothness under the two-worker split) are not yet
-hardware-validated. Host coverage: `bt_controls` checks the squared-amplitude
-mute ramp and the decoder stream-boundary reset, and `bt_binding` drives the
-A2DP binding's state machine; the full host suite is 35/35 with `check_code.py`
-at 71 translation units, 0 failed.
+volume but was silent; the mute fix above restored clear audible playback.
+User-confirmed on hardware: playback is smooth, and both AVRCP volume and mute
+change the speaker output. Metrics were not instrumented, so the two-worker
+smoothness is a listening result rather than a measured underrun count. Track
+metadata, reconnect/pairing-window management and forget/remove-bond remain
+unvalidated on hardware. Host coverage: `bt_controls` checks the squared-
+amplitude mute ramp and the decoder stream-boundary reset, and `bt_binding`
+drives the A2DP binding's state machine; the full host suite is 35/35 with
+`check_code.py` at 71 translation units, 0 failed.
 
 A first controls pass merged decoding into the I2S output worker and stuttered on
 hardware (user report): decoding on the output thread delayed each blocking I2S

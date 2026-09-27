@@ -87,9 +87,10 @@ There is no fixed finish date until these scopes and hardware gates are validate
    owner-task control path (AVRCP volume/mute with NVS persistence, track
    metadata, reconnect with bounded backoff, a 120 s pairing window, forget/
    remove-bond) and discontinuity-based stream-boundary handling on a separate
-   decode worker, so decoding never delays the I2S output. Still open: hardware
-   testing of those controls, source arbitration and Wi-Fi/BT coexistence.
-   AAC/LDAC codecs remain separate.
+   decode worker, so decoding never delays the I2S output. User-confirmed on
+   hardware: smooth playback with working AVRCP volume and mute. Still open:
+   track metadata, reconnect/pairing-window and forget/remove-bond hardware
+   checks, source arbitration and Wi-Fi/BT coexistence. AAC/LDAC remain separate.
 - [ ] **T09 — I2S drain/recovery and clock behavior.** Implement/verify EOF drain,
   driver queue starvation recovery and clean reconfigure. Scope clocks and prove
   DMA ownership/cache correctness on the actual ESP32 driver.
