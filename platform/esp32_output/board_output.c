@@ -1,15 +1,20 @@
 #include "board_output.h"
 #include <eaf/eaf_core.h>
 #include <eaf/eaf_dsp.h>
+#include <eaf/eaf_sink_null.h>
 #include <stdarg.h>
 #include <stdio.h>
 static eaf_board_log_fn log_sink;
 static int audio_cpu = -1;
+static eaf_board_sink_init_fn sink_init_hook;
+static eaf_board_sink_pause_fn sink_pause_hook;
+static eaf_board_delay_fn delay_hook;
 static eaf_reservoir_t reservoir;
 static eaf_pipeline_t pipeline;
 static int32_t *storage;
 static uint32_t capacity;
-static eaf_sink_t *sink;
+static eaf_null_sink_ctx_t default_sink_ctx;
+static eaf_sink_t sink = {&eaf_null_sink_ops, &default_sink_ctx};
 static uint8_t input_channels;
 static eaf_volume_ctx_t volume = {{INT32_MAX, INT32_MAX, INT32_MAX, INT32_MAX}};
 static eaf_node_t master = {"master volume", EAF_NODE_STAGE_POST_PROCESS, &eaf_volume_ops, &volume};
@@ -63,14 +68,14 @@ static void consume(void *ctx) {
         hal_sleep_ms(1);
     while (!hal_atomic_get(&quit)) {
         if (hal_atomic_get(&pause_request)) {
-            if (board_sink_pause(true)) {
+            if (sink_pause_hook && sink_pause_hook(true)) {
                 hal_atomic_set(&failed, 1);
                 break;
             }
             hal_atomic_set(&pause_ack, 1);
             while (hal_atomic_get(&pause_request) && !hal_atomic_get(&quit))
                 hal_sleep_ms(1);
-            if (board_sink_pause(false)) {
+            if (sink_pause_hook && sink_pause_hook(false)) {
                 hal_atomic_set(&failed, 1);
                 break;
             }
@@ -87,6 +92,10 @@ static void consume(void *ctx) {
         }
         hal_atomic_set(&underruns, reservoir.underruns);
         uint64_t presented = reservoir.frames_read;
+        if (delay_hook) {
+            uint32_t delay = delay_hook();
+            presented = presented > delay ? presented - delay : 0;
+        }
         if (presented && rc != EAF_EOF) {
             uint32_t level = eaf_reservoir_level(&reservoir);
             if (level < hal_atomic_get(&queue_min))
@@ -101,7 +110,7 @@ static void consume(void *ctx) {
     }
     hal_atomic_set(&done, 1);
 }
-static int pause_output(bool paused) {
+static int request_pause(bool paused) {
     output_log("Output pause request=%u", paused ? 1u : 0u);
     hal_atomic_set(&pause_request, paused ? 1u : 0u);
     /* Before initial release the worker cannot touch graph or sink yet. */
@@ -155,7 +164,7 @@ int eaf_board_output_start(const eaf_format_t *format, uint32_t ready_frames, bo
     output_log("Output request: %u Hz channels=%u", format->sample_rate,
                (unsigned)format->num_channels);
     input_channels = format->num_channels;
-    eaf_pipeline_config_t config = {&reservoir, nodes, 2, sink};
+    eaf_pipeline_config_t config = {&reservoir, nodes, 2, &sink};
     int rc = eaf_reservoir_init(&reservoir, storage, capacity,
                                 (eaf_format_t){format->sample_rate, 2, 3}, ready_frames);
     if (!rc)
@@ -245,12 +254,17 @@ int eaf_board_output_init(const eaf_board_output_config_t *config) {
     capacity = config->capacity_frames;
     log_sink = config->log;
     audio_cpu = config->audio_cpu;
-    sink = board_sink();
-    return board_sink_init();
+    eaf_sink_t *resolved = config->sink ? config->sink() : board_sink();
+    if (resolved)
+        sink = *resolved;
+    sink_init_hook = config->sink_init ? config->sink_init : board_sink_init;
+    sink_pause_hook = config->sink_pause ? config->sink_pause : board_sink_pause;
+    delay_hook = config->delay;
+    return sink_init_hook ? sink_init_hook() : EAF_OK;
 }
 
 int eaf_board_output_pause(bool paused) {
-    return pause_output(paused);
+    return request_pause(paused);
 }
 int eaf_board_output_volume(int32_t left, int32_t right) {
     return set_volume(NULL, left, right);

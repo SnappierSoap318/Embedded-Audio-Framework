@@ -6,12 +6,22 @@
    then drive this interface from their protocol adapter. */
 
 typedef void (*eaf_board_log_fn)(const char *message);
+typedef eaf_sink_t *(*eaf_board_sink_source_fn)(void);
+typedef int (*eaf_board_sink_init_fn)(void);
+typedef int (*eaf_board_sink_pause_fn)(bool paused);
+/* Frames still queued in the sink, subtracted from elapsed playback. */
+typedef uint32_t (*eaf_board_delay_fn)(void);
 
 typedef struct {
     int audio_cpu; /* -1 unrestricted; otherwise an OS CPU index. */
     eaf_board_log_fn log;
     int32_t *storage;
     uint32_t capacity_frames;
+    /* Optional platform hooks; NULL falls back to the board_sink symbols below. */
+    eaf_board_sink_source_fn sink;
+    eaf_board_sink_init_fn sink_init;
+    eaf_board_sink_pause_fn sink_pause;
+    eaf_board_delay_fn delay;
 } eaf_board_output_config_t;
 
 typedef struct {
@@ -46,7 +56,13 @@ uint32_t eaf_board_output_process_calls(void);
 /* Transport-thread snapshot: active=1, released=2, pause request=4, ack=8, done=16. */
 uint32_t eaf_board_output_flags(void);
 
-/* Implemented by the application's selected sink backend. */
-eaf_sink_t *board_sink(void);
-int board_sink_init(void);
-int board_sink_pause(bool paused);
+/* Implemented by the application's selected sink backend, or injected above. */
+#if defined(__GNUC__)
+#define EAF_BOARD_WEAK __attribute__((weak))
+#else
+#define EAF_BOARD_WEAK
+#endif
+eaf_sink_t *board_sink(void) EAF_BOARD_WEAK;
+int board_sink_init(void) EAF_BOARD_WEAK;
+int board_sink_pause(bool paused) EAF_BOARD_WEAK;
+#undef EAF_BOARD_WEAK
