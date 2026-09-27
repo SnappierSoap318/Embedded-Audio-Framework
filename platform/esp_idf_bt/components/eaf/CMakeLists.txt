@@ -7,6 +7,7 @@ idf_component_register(
   SRCS
     "${EAF_ROOT}/core/eaf_types.c"
     "${EAF_ROOT}/core/eaf_reservoir.c"
+    "${EAF_ROOT}/core/eaf_dsp.c"
     "${EAF_ROOT}/apps/bt/bt_ingress.c"
     "${EAF_ROOT}/apps/bt/bt_decoder.c"
     "${EAF_ROOT}/apps/bt/bt_volume.c"
