@@ -140,26 +140,25 @@ int main(void) {
     deliver(4, (uint16_t)(EAF_BT_PACKET_BYTES + 1), 555);
     CHECK(!eaf_bt_ingress_pop(&queue, &packet));
 
-    /* A rejected configuration stops streaming; a matching one recovers. */
+    /* Codec-config acceptance must not gate streaming: a rejected config still
+     * starts the stream (the decoder drops anything undecodable). */
     configure(false);
     audio_state(ESP_A2D_AUDIO_STATE_STARTED);
     status(&st);
-    CHECK(!st.streaming);
-    configure(true);
-    audio_state(ESP_A2D_AUDIO_STATE_STARTED);
-    status(&st);
     CHECK(st.streaming);
+    deliver(4, 9, 666);
+    CHECK(eaf_bt_ingress_pop(&queue, &packet));
 
-    /* Disconnect clears stream and codec state. */
+    /* Disconnect clears stream state. */
     connect(peer, ESP_A2D_CONNECTION_STATE_DISCONNECTED);
     status(&st);
     CHECK(!st.connected && !st.streaming);
 
-    /* Missing config after reconnect must not stream until configured again. */
+    /* A start after reconnect streams again without a fresh config event. */
     connect(peer, ESP_A2D_CONNECTION_STATE_CONNECTED);
     audio_state(ESP_A2D_AUDIO_STATE_STARTED);
     status(&st);
-    CHECK(st.connected && !st.streaming);
+    CHECK(st.connected && st.streaming);
 
     CHECK(notifications > 0);
     return 0;

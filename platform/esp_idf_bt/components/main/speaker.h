@@ -19,7 +19,8 @@ typedef struct {
     uint32_t position_ms, duration_ms;
 } speaker_status_t;
 
-/* Call once with Bluedroid enabled, before A2DP registration. */
+/* Call once with Bluedroid enabled, before A2DP registration. Volume starts at
+ * full and unmuted every boot; only the last peer is persisted. */
 int speaker_start(void);
 /* Nonblocking command enqueue. EAF_OK means accepted, not completed.
  * Volume uses AVRCP units 0..127; mute uses 0/1. Pair lasts 120 seconds.

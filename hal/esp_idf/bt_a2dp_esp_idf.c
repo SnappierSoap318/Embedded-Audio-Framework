@@ -133,8 +133,10 @@ static void a2d_cb(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param) {
         notify = true;
         break;
     case ESP_A2D_AUDIO_STATE_EVT: {
+        /* Stream on every start; a rejected codec-config must not silently mute
+         * an otherwise decodable stream (the decoder drops undecodable frames). */
         bool started = param->audio_stat.state == ESP_A2D_AUDIO_STATE_STARTED;
-        state.streaming = state.configured && started;
+        state.streaming = started;
         if (state.ingress)
             state.ingress->discontinuity = true;
         portENTER_CRITICAL(&lock);

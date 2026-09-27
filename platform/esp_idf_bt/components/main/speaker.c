@@ -364,8 +364,9 @@ static void handle_event(const event_t *event) {
         volume_subscribed = false;
         break;
     case VOLUME:
-        if (tg_connected)
-            set_volume(event->value, false, true);
+        /* Apply the peer's absolute volume even if the target control channel
+         * is not up yet; it is only our local gain. */
+        set_volume(event->value, false, true);
         break;
     case VOLUME_SUBSCRIBE:
         if (tg_connected) {
@@ -425,8 +426,6 @@ static void handle_event(const event_t *event) {
 static void save_settings(void) {
     if (!settings_open)
         return;
-    check("save volume", nvs_set_u8(settings, "volume", status.volume));
-    check("save mute", nvs_set_u8(settings, "mute", status.muted));
     if (have_peer && !forgetting)
         check("save peer", nvs_set_blob(settings, "peer", last_peer, sizeof(last_peer)));
     check("commit settings", nvs_commit(settings));
@@ -533,81 +532,19 @@ static void control_task(void *arg) {
     }
 }
 
-/* Small line-oriented console; a USB/serial terminal replaces physical buttons.
- * Overlong lines are discarded in full rather than executing a truncated command. */
-static void console_task(void *arg) {
-    (void)arg;
-    char line[64];
-    size_t length = 0;
-    bool discard = false;
-    for (;;) {
-        int ch = getchar();
-        if (ch == EOF) {
-            clearerr(stdin);
-            vTaskDelay(pdMS_TO_TICKS(20));
-            continue;
-        }
-        if (ch == '\r' || ch == '\n') {
-            line[length] = 0;
-            if (!discard && length) {
-                speaker_command_t command = SPEAKER_STATUS;
-                unsigned value = 0;
-                bool valid = true;
-                if (!strcmp(line, "bt status"))
-                    command = SPEAKER_STATUS;
-                else if (!strcmp(line, "bt pair"))
-                    command = SPEAKER_PAIR;
-                else if (!strcmp(line, "bt reconnect"))
-                    command = SPEAKER_RECONNECT;
-                else if (!strcmp(line, "bt disconnect"))
-                    command = SPEAKER_DISCONNECT;
-                else if (!strcmp(line, "bt forget"))
-                    command = SPEAKER_FORGET;
-                else if (!strcmp(line, "bt mute")) {
-                    command = SPEAKER_MUTE;
-                    value = 1;
-                } else if (!strcmp(line, "bt unmute"))
-                    command = SPEAKER_MUTE;
-                else if (!strncmp(line, "bt volume ", 10)) {
-                    char *end;
-                    unsigned long parsed = strtoul(line + 10, &end, 10);
-                    valid = end != line + 10 && *end == 0 && parsed <= 127;
-                    command = SPEAKER_VOLUME;
-                    value = (unsigned)parsed;
-                } else
-                    valid = false;
-                if (valid)
-                    ESP_LOGI(TAG, "command result=%d", speaker_command(command, value));
-                else
-                    ESP_LOGI(
-                        TAG,
-                        "bt status|pair|reconnect|disconnect|forget|mute|unmute|volume 0..127");
-            }
-            length = 0;
-            discard = false;
-        } else if (ch == 8 || ch == 127) {
-            if (length)
-                --length;
-        } else if (length + 1 < sizeof(line))
-            line[length++] = (char)ch;
-        else
-            discard = true;
-    }
-}
-
 int speaker_start(void) {
     events = xQueueCreate(32, sizeof(event_t));
     if (!events)
         return EAF_IO;
+    /* Only the peer is persisted. Volume/mute start at full and unmuted so a
+     * stale stored value can never boot the speaker silent. */
+    status.volume = 127;
+    status.muted = false;
     if (nvs_open("eaf_bt", NVS_READWRITE, &settings) == ESP_OK) {
         settings_open = true;
-        uint8_t volume = 127, mute = 0;
-        (void)nvs_get_u8(settings, "volume", &volume);
-        (void)nvs_get_u8(settings, "mute", &mute);
-        status.volume = volume <= 127 ? volume : 127;
-        status.muted = mute != 0;
         size_t length = sizeof(last_peer);
         have_peer = nvs_get_blob(settings, "peer", last_peer, &length) == ESP_OK && length == 6;
+        ESP_LOGI(TAG, "restored peer=%d", have_peer);
     }
     publish();
     ESP_ERROR_CHECK(esp_bt_gap_register_callback(gap_cb));
@@ -625,8 +562,6 @@ int speaker_start(void) {
     esp_avrc_rn_evt_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &mask, ESP_AVRC_RN_VOLUME_CHANGE);
     ESP_ERROR_CHECK(esp_avrc_tg_set_rn_evt_cap(&mask));
     if (xTaskCreate(control_task, "bt_control", 4096, NULL, 5, NULL) != pdPASS)
-        return EAF_IO;
-    if (xTaskCreate(console_task, "bt_console", 3072, NULL, 2, NULL) != pdPASS)
         return EAF_IO;
     return EAF_OK;
 }

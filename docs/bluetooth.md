@@ -108,10 +108,12 @@ a queue; no borrowed metadata pointer escapes the callback and no stack call is
 made from application context. It provides:
 
 - **Volume and mute.** AVRCP target `SetAbsoluteVolume` (0..127) and
-  `RegisterNotification(VOLUME_CHANGE)`. Volume/mute persist in NVS. The audio
-  owner applies a squared-amplitude ramp over 256 frames together with mute, so
-  changes do not click. A local change sends a `CHANGED` notification; a remote
-  change is applied without echoing, avoiding a volume loop.
+  `RegisterNotification(VOLUME_CHANGE)`, applied as a squared-amplitude ramp
+  over 256 frames so changes do not click. A local change sends a `CHANGED`
+  notification; a remote change is applied without echoing, avoiding a volume
+  loop. Volume starts at full and unmuted every boot: a persisted volume of 0
+  could otherwise boot the speaker silent with no local control to recover.
+  Only the last peer is persisted in NVS.
 - **Track metadata.** AVRCP controller metadata (title/artist/album) plus play
   status and position, requested on connect/track change and re-armed via
   notifications. Control characters are stripped before storage or logging.
@@ -130,9 +132,9 @@ made from application context. It provides:
   from silence on each connect. The reservoir is never cursor-reset while
   running, so a stream boundary cannot race the consumer; a short tail drains
   naturally on pause or suspend.
-- **Buttonless control.** `speaker_command()` / `speaker_get_status()` plus a
-  UART console: `bt status|pair|reconnect|disconnect|forget|mute|unmute|volume
-  0..127`.
+- **Buttonless control.** `speaker_command()` / `speaker_get_status()` expose
+  status, volume, mute, pair, reconnect, disconnect and forget to the board
+  application (serial/button/UI integration is the caller's choice).
 
 Only one PCM producer exists in this application; arbitration with Wi-Fi/LMS/
 Sendspin sources remains separate work. The controls above are build-validated
@@ -145,3 +147,10 @@ That produced audible stuttering: decoding on the output thread added latency
 before each blocking I2S write, and the per-event reservoir reset discarded
 buffered audio. The two-worker split above removes both; keep the decoder off the
 audio owner's critical path.
+
+A follow-up gated streaming and decoding on the negotiated codec-config check and
+persisted volume/mute. On hardware this booted silent even though A2DP and AVRCP
+connected and responded. Codec-config acceptance must not gate streaming (the
+decoder already drops undecodable frames, and a rejected config otherwise mutes
+a decodable stream), and volume must not be restored from NVS at 0/muted. Both
+are corrected; the host `bt_binding` test now pins the no-gate behaviour.

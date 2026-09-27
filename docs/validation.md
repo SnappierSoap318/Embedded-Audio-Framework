@@ -22,10 +22,16 @@ amplitude mute ramp and the decoder stream-boundary reset; the full host suite i
 34/34 with `check_code.py` at 70 translation units, 0 failed.
 
 A first controls pass merged decoding into the I2S output worker and stuttered on
-hardware (user report). The cause was decoding on the output thread delaying each
-blocking I2S write, plus a per-event reservoir reset discarding buffered audio.
-The decode and output workers are split again; the stutter fix is not yet
-hardware-confirmed.
+hardware (user report): decoding on the output thread delayed each blocking I2S
+write, and a per-event reservoir reset discarded buffered audio. The decode and
+output workers are split again.
+
+A later build booted silent on hardware while A2DP/AVRCP connected and responded.
+Code review plus the new `bt_binding` host test localised it to two control-pass
+choices, both removed: streaming/decoding were gated on the codec-config check
+(so a rejected config muted a decodable stream), and volume/mute were restored
+from NVS (so a stored 0/muted booted silent). Neither the stutter nor the silence
+fix is hardware-confirmed yet.
 
 ## P0: native LMS startup ownership
 
