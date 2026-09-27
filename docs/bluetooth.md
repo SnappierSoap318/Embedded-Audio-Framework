@@ -118,9 +118,12 @@ made from application context. It provides:
   status and position, requested on connect/track change and re-armed via
   notifications. Control characters are stripped before storage or logging.
 - **Connection management.** The last peer is remembered in NVS and
-  auto-reconnected with bounded backoff (five attempts, cap 32 s, then a pairing
-  window). The device is connectable and non-discoverable while a peer is known;
-  it is generally discoverable only during a pairing window.
+  auto-reconnected with bounded backoff (three attempts, then a pairing window).
+  The device is connectable and non-discoverable while a peer is known. If that
+  peer rejects our link key — it unpaired on its side — the stale bond is removed
+  and the speaker becomes discoverable immediately, so a forgotten pairing cannot
+  leave the speaker invisible. With no remembered peer the pairing window is
+  re-opened indefinitely, so any device can pair.
 - **Pairing management.** A 120-second pairing window uses SSP Just Works (IO
   capability none). `forget` disconnects, removes all bonds and the remembered
   peer, then reopens pairing.

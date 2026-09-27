@@ -298,6 +298,24 @@ static void show_status(void) {
     ESP_LOGI(TAG, "title: %s | artist: %s | album: %s", status.title, status.artist, status.album);
 }
 
+/* Drop the remembered peer, remove its bond and become discoverable. Used by the
+ * explicit forget command and when a peer that unpaired on its side rejects our
+ * link key, so a stale bond cannot keep the speaker invisible. */
+static void begin_forget(void) {
+    automatic = false;
+    forgetting = true;
+    have_peer = false;
+    status.pairing = false;
+    disconnect();
+    scan_mode();
+    if (settings_open) {
+        esp_err_t err = nvs_erase_key(settings, "peer");
+        if (err != ESP_ERR_NVS_NOT_FOUND)
+            check("forget peer", err);
+        check("save forget", nvs_commit(settings));
+    }
+}
+
 static void handle_command(const event_t *event) {
     switch ((speaker_command_t)event->value) {
     case SPEAKER_STATUS:
@@ -329,18 +347,7 @@ static void handle_command(const event_t *event) {
         scan_mode();
         break;
     case SPEAKER_FORGET:
-        automatic = false;
-        forgetting = true;
-        have_peer = false;
-        status.pairing = false;
-        disconnect();
-        scan_mode();
-        if (settings_open) {
-            esp_err_t err = nvs_erase_key(settings, "peer");
-            if (err != ESP_ERR_NVS_NOT_FOUND)
-                check("forget peer", err);
-            check("save forget", nvs_commit(settings));
-        }
+        begin_forget();
         break;
     }
 }
@@ -413,6 +420,13 @@ static void handle_event(const event_t *event) {
         break;
     case AUTH:
         ESP_LOGI(TAG, "authentication status=0x%x", event->value);
+        /* The remembered peer no longer has our link key (it unpaired): drop the
+         * stale bond and become discoverable instead of retrying forever. */
+        if (event->value != ESP_BT_STATUS_SUCCESS && have_peer && !status.connected &&
+            memcmp(event->peer, last_peer, 6) == 0) {
+            ESP_LOGW(TAG, "peer rejected the link key; returning to pairing");
+            begin_forget();
+        }
         refresh_bonds();
         break;
     case BOND_REMOVED:
@@ -473,11 +487,17 @@ static void tick(void) {
         }
     }
     if (status.pairing && now >= pair_until) {
-        status.pairing = false;
-        automatic = have_peer;
-        attempts = 0;
-        retry_at = now;
-        scan_mode();
+        if (!have_peer && !link.connected) {
+            /* No device to return to: keep re-opening the pairing window so the
+             * speaker stays discoverable until something pairs. */
+            start_pairing();
+        } else {
+            status.pairing = false;
+            automatic = have_peer;
+            attempts = 0;
+            retry_at = now;
+            scan_mode();
+        }
     }
     if (attempting && !link.connected && now >= attempt_until) {
         if (!cancelling) {
@@ -494,7 +514,10 @@ static void tick(void) {
     }
     if (link.ready && automatic && have_peer && !forgetting && !status.pairing && !link.connected &&
         !link.connecting && !attempting && now >= retry_at) {
-        if (attempts >= 5) {
+        if (attempts >= 3) {
+            /* The peer never answered; open the pairing window so any device can
+             * pair while we keep the remembered peer connectable. */
+            ESP_LOGW(TAG, "no reconnect from the remembered peer; pairing");
             start_pairing();
         } else {
             esp_err_t err = esp_a2d_sink_connect(last_peer);
@@ -503,7 +526,7 @@ static void tick(void) {
             attempting = err == ESP_OK;
             attempt_until = now + 12000;
             retry_at = now + (int64_t)(2000u << attempts);
-            ESP_LOGI(TAG, "reconnect attempt %u/5", attempts);
+            ESP_LOGI(TAG, "reconnect attempt %u/3", attempts);
         }
     }
     if (settings_dirty && now >= save_at)
